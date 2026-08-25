@@ -8,6 +8,8 @@ import { ThemeToggle } from "../theme-toggle";
 import { LogoutButton } from "../logout-button";
 import { PanelFooter } from "../site-footer";
 import { AccountViewSwitch } from "../account-view-switch";
+import { ConnectionBadge } from "../connection-badge";
+import { OfflineBar } from "../offline-bar";
 
 // Pogrupowane tematycznie - płaska lista urosła do kilkunastu pozycji i
 // przestawała się mieścić w nagłówku. Każdy ekran jest najwyżej dwa
@@ -118,12 +120,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           <div className="flex min-w-0 items-center gap-4">
             <HeaderNav groups={navGroups} />
+            <ConnectionBadge />
             {ownTrainer ? <AccountViewSwitch current="admin" /> : null}
             <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
       </header>
+      {/* Stan bazy nad treścią, a nie w ustawieniach: kto pracuje bez łącza,
+          ma to widzieć zanim zacznie ufać liczbom na ekranie. */}
+      <OfflineBar />
       <main className={`${PAGE_SHELL} flex-1 py-4`}>{children}</main>
       <PanelFooter />
     </div>

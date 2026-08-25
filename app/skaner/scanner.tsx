@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { isNetworkError, isOffline, reportError, reportSuccess } from "@/lib/offline/connection";
+import { enqueue } from "@/lib/offline/queue";
 import { scanCheckInAction, type ScanResult } from "./actions";
 
 // Minimalny typ natywnego BarcodeDetector (brak w lib.dom). Używamy go, gdy
@@ -25,7 +27,20 @@ function timeHM(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function Scanner({ locationId }: { locationId: string | null }) {
+// Skrót tokenu na listę zapisów offline. Bez łącza nie mamy jak zapytać bazy,
+// kto to jest, więc pokazujemy tyle, ile stacja wie sama - salę i ogon kodu.
+// Nazwisko dojdzie w chwili dopisania.
+function shortToken(token: string): string {
+  return `···${token.trim().slice(-6)}`;
+}
+
+export function Scanner({
+  locationId,
+  locationName,
+}: {
+  locationId: string | null;
+  locationName: string | null;
+}) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -37,6 +52,9 @@ export function Scanner({ locationId }: { locationId: string | null }) {
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
+  // Odbicie odłożone na urządzeniu - osobno od wyniku z serwera, bo to nie
+  // jest odpowiedź bazy, tylko obietnica, że zapis nie przepadł.
+  const [queued, setQueued] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -49,18 +67,47 @@ export function Scanner({ locationId }: { locationId: string | null }) {
       if (token === lastRef.current.token && now - lastRef.current.at < 4000) return;
       lastRef.current = { token, at: now };
 
+      // Godzina odczytu kodu, nie godzina wysyłki. Bez niej odbicie dopisane
+      // po powrocie wifi wylądowałoby w bazie o dwie godziny za późno.
+      const scannedAt = new Date();
+      const odloz = () => {
+        enqueue({
+          op: "WEJSCIE_NA_SALE",
+          detail: [locationName, shortToken(token)].filter(Boolean).join(" · "),
+          payload: { token: token.trim(), locationId },
+          recordedAt: scannedAt,
+        });
+        setResult(null);
+        setQueued(
+          "Brak łącza - wejście zapisane na tym urządzeniu. Dopiszesz je do bazy po powrocie sieci.",
+        );
+      };
+
+      if (isOffline()) {
+        odloz();
+        return;
+      }
+
       busyRef.current = true;
       setPending(true);
       try {
         const res = await scanCheckInAction(token, locationId);
+        reportSuccess();
+        setQueued(null);
         setResult(res);
         if (res.ok) router.refresh();
+      } catch (blad) {
+        // Odmowa serwera ma własne komunikaty i wraca jako wynik, nie jako
+        // wyjątek. Tutaj zostaje wyłącznie brak łącza - i tylko to kolejkujemy.
+        if (!isNetworkError(blad)) throw blad;
+        reportError(blad);
+        odloz();
       } finally {
         setPending(false);
         busyRef.current = false;
       }
     },
-    [locationId, router],
+    [locationId, locationName, router],
   );
 
   // Pętla kamery: co ~500 ms próbujemy zdekodować klatkę.
@@ -170,6 +217,12 @@ export function Scanner({ locationId }: { locationId: string | null }) {
           Odbij
         </Button>
       </form>
+
+      {queued ? (
+        <div className="border-amber/60 bg-amber/10 text-amber rounded-md border p-4 text-center text-sm">
+          {queued}
+        </div>
+      ) : null}
 
       {result ? (
         result.ok ? (

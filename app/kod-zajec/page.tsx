@@ -13,6 +13,8 @@ import { getClubSettings } from "@/lib/services/settings";
 import { requestBaseUrl } from "@/lib/base-url";
 import { formatTime } from "@/lib/format";
 import { qrSvg } from "@/lib/qr";
+import { ConnectionBadge } from "../connection-badge";
+import { OfflineBar } from "../offline-bar";
 import { ClassScanner } from "./class-scanner";
 import { KioskClock } from "./kiosk-clock";
 
@@ -45,7 +47,8 @@ export default async function ClassQrStationPage({
     prisma.location.findMany({ orderBy: { name: "asc" } }),
     getClubSettings(),
   ]);
-  const activeLocationId = locations.find((l) => l.id === loc)?.id ?? locations[0]?.id ?? null;
+  const activeLocation = locations.find((l) => l.id === loc) ?? locations[0] ?? null;
+  const activeLocationId = activeLocation?.id ?? null;
 
   const now = new Date();
 
@@ -104,9 +107,16 @@ export default async function ClassQrStationPage({
     <main className="mx-auto flex min-h-full w-full max-w-2xl flex-1 flex-col gap-5 p-4">
       <meta httpEquiv="refresh" content={String(REFRESH_SECONDS)} />
 
+      {/* Kiosk nie ma nad sobą nagłówka panelu (widzi go też konto KIOSK bez
+          dostępu do reszty systemu), więc stan bazy wchodzi tutaj. */}
+      <OfflineBar />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="font-display text-brand-red text-2xl tracking-wide">Kod na zajęcia</h1>
-        <KioskClock initial={formatTime(now)} />
+        <div className="flex items-center gap-2">
+          <ConnectionBadge />
+          <KioskClock initial={formatTime(now)} />
+        </div>
       </div>
 
       {locations.length > 1 ? (
@@ -138,7 +148,7 @@ export default async function ClassQrStationPage({
         <p className="text-muted-brand mt-1 mb-3 text-sm">
           Prowadzący odbija się wyłącznie tędy. Pokaż kod z zakładki „Mój kod wejścia”.
         </p>
-        <ClassScanner locationId={activeLocationId} />
+        <ClassScanner locationId={activeLocationId} locationName={activeLocation?.name ?? null} />
       </section>
 
       {cards.length === 0 ? (

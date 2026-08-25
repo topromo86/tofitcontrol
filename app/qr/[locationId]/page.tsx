@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { getAccessibleMembers } from "@/lib/auth/guard";
 import { isWithinCheckInWindow } from "@/lib/domain/booking";
 import { Button } from "@/components/ui/button";
+import { ConnectionBadge } from "../../connection-badge";
+import { OfflineBar } from "../../offline-bar";
+import { OfflineForm } from "../../offline-form";
 import { checkInAction } from "./actions";
 
 export default async function QrCheckInPage({
@@ -39,10 +42,20 @@ export default async function QrCheckInPage({
 
   return (
     <main className="mx-auto flex min-h-full max-w-sm flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
+      {/* Kod na ścianie skanuje się telefonem, a zasięg na sali bywa żaden -
+          stan łącza i kolejka muszą tu być widoczne, bo to jedyny ekran
+          meldunku. */}
+      <div className="w-full">
+        <OfflineBar />
+      </div>
+
       <h1 className="font-display text-brand-red text-2xl tracking-wide">{location.name}</h1>
-      <p className="text-muted-brand font-mono text-xs tracking-widest uppercase">
-        Meldowanie na zajęcia
-      </p>
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+          Meldowanie na zajęcia
+        </p>
+        <ConnectionBadge />
+      </div>
 
       {success ? (
         <p
@@ -69,12 +82,18 @@ export default async function QrCheckInPage({
           {booking ? (
             <>
               <p className="text-muted-brand mt-1 text-sm">{booking.session.name}</p>
-              <form action={checkInAction}>
+              <OfflineForm
+                action={checkInAction}
+                op="MELDUNEK_KLUBOWICZA"
+                detail={`${member.firstName} ${member.lastName} · ${booking.session.name}`}
+                fields={["bookingId"]}
+                offlineLabel="Zapisane bez sieci - wyślij po powrocie zasięgu"
+              >
                 <input type="hidden" name="bookingId" value={booking.id} />
                 <Button type="submit" className="mt-3 w-full">
                   Zamelduj obecność
                 </Button>
-              </form>
+              </OfflineForm>
             </>
           ) : (
             <p className="text-muted-brand mt-2 text-sm">Brak rezerwacji w oknie czasowym.</p>

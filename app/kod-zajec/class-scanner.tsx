@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import jsQR from "jsqr";
+import { isNetworkError, isOffline, reportError, reportSuccess } from "@/lib/offline/connection";
+import { enqueue } from "@/lib/offline/queue";
 import { stationScanAction, type StationScanView } from "./actions";
 
 // Kamera kiosku czytająca osobiste kody rotacyjne. To jest droga prowadzącego:
@@ -23,7 +25,13 @@ function getDetectorCtor(): BarcodeDetectorCtor | null {
   return (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector ?? null;
 }
 
-export function ClassScanner({ locationId }: { locationId: string | null }) {
+export function ClassScanner({
+  locationId,
+  locationName,
+}: {
+  locationId: string | null;
+  locationName: string | null;
+}) {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -35,6 +43,9 @@ export function ClassScanner({ locationId }: { locationId: string | null }) {
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [result, setResult] = useState<StationScanView | null>(null);
+  // Odbicie odłożone bez łącza. Osobno od wyniku z serwera, bo kiosk ma
+  // powiedzieć wprost, że baza jeszcze o tym nie wie.
+  const [queued, setQueued] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [pending, setPending] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -48,18 +59,47 @@ export function ClassScanner({ locationId }: { locationId: string | null }) {
       if (code === lastRef.current.code && now - lastRef.current.at < 4000) return;
       lastRef.current = { code, at: now };
 
+      // Godzina odczytu kodu. Tutaj to nie jest wygoda, tylko warunek
+      // działania: kod rotacyjny żyje 30 sekund, więc sprawdzony wobec "teraz"
+      // po powrocie wifi zawsze byłby wygasły. Zapisujemy moment, w którym
+      // stanął przed kamerą, i wobec niego serwer go potem sprawdza.
+      const scannedAt = new Date();
+      const odloz = () => {
+        enqueue({
+          op: "ODBICIE_NA_ZAJECIACH",
+          detail: [locationName, "kod z telefonu"].filter(Boolean).join(" · "),
+          payload: { code: code.trim(), locationId },
+          recordedAt: scannedAt,
+        });
+        setResult(null);
+        setQueued(
+          "Brak łącza - odbicie zapisane na tym urządzeniu z godziną skanu. Dopiszesz je po powrocie sieci.",
+        );
+      };
+
+      if (isOffline()) {
+        odloz();
+        return;
+      }
+
       busyRef.current = true;
       setPending(true);
       try {
         const res = await stationScanAction(code, locationId);
+        reportSuccess();
+        setQueued(null);
         setResult(res);
         if (res.ok) router.refresh();
+      } catch (blad) {
+        if (!isNetworkError(blad)) throw blad;
+        reportError(blad);
+        odloz();
       } finally {
         setPending(false);
         busyRef.current = false;
       }
     },
-    [locationId, router],
+    [locationId, locationName, router],
   );
 
   // Odczyt klatki przez jsQR - droga dla przeglądarek bez BarcodeDetector
@@ -152,6 +192,15 @@ export function ClassScanner({ locationId }: { locationId: string | null }) {
           Kamera aktywna · pokaż kod z telefonu
         </p>
       )}
+
+      {queued ? (
+        <div
+          role="status"
+          className="border-amber/60 bg-amber/10 text-amber rounded-md border p-3 text-center text-sm"
+        >
+          {queued}
+        </div>
+      ) : null}
 
       {result ? (
         <div
