@@ -126,6 +126,77 @@ Kamera działa tylko po HTTPS - na Vercelu tak, na tablecie wpiętym po adresie
 IP w sieci lokalnej nie. Dekodowanie ma dwie drogi: natywny `BarcodeDetector`
 (Chrome/Android) i `jsQR` dla Safari na iPadzie.
 
+## Praca bez sieci
+
+Na sali wifi potrafi paść w środku zajęć, a odbicia muszą iść dalej. Aplikacja
+nie może wtedy ani zamilknąć, ani udawać, że nic się nie stało — bo wtedy
+trener liczyłby na danych sprzed zerwania, nie wiedząc o tym.
+
+**Stan bazy widać cały czas**, w pasku nagłówka (`app/connection-badge.tsx`),
+a nie w ustawieniach — w trakcie zajęć nikt tam nie zagląda. Kolory: zielony
+(zapisy idą do bazy), pomarańczowy (baza odpowiada, ale coś czeka w kolejce),
+czerwony (brak kontaktu). Stan liczy `lib/offline/connection.ts` z trzech
+źródeł: zdarzeń `online`/`offline` przeglądarki, wyniku każdego realnego
+zapisu i pingu `/api/zdrowie` co 20 s (co 5 s po zerwaniu).
+
+Sam `navigator.onLine` nie wystarcza: wifi klubu bywa „jest", ale nie
+przepuszcza ruchu. Dlatego OFFLINE zapala się dopiero, gdy serwer nie
+odpowiada — a odmowa serwera (401, 403, 500) **nie** jest brakiem łącza.
+Gdyby była, wskaźnik kłamałby i przestano by mu wierzyć.
+
+### Co da się zapisać bez łącza
+
+Wyłącznie zdarzenia z sali, bo one się **dopisują**, a nie nadpisują — dwie
+osoby offline nie zrobią sobie nawzajem krzywdy:
+
+- `/skaner` — odbicie osobistego kodu QR na stacji wejścia,
+- `/kod-zajec` — kod rotacyjny na kiosku,
+- panel trenera — ręczne zaznaczenie obecności i potwierdzenie listy,
+- `/qr/[locationId]` — meldunek klubowicza z kodu na ścianie.
+
+Reszta panelu bez sieci działa **tylko do odczytu** (service worker podaje
+ostatnio otwarte ekrany z pamięci urządzenia). Kolejkowanie edycji karnetów,
+kasy czy grafiku byłoby prostą drogą do skasowania cudzej zmiany.
+
+### Jak wracają do bazy
+
+Zapis bez łącza trafia do kolejki w `localStorage` (`lib/offline/queue.ts`)
+razem z **godziną zdarzenia**, nie wysyłki. To nie jest kosmetyka: kod
+rotacyjny żyje 30 sekund, więc sprawdzony wobec „teraz" po powrocie wifi
+zawsze byłby wygasły. Serwer sprawdza go wobec momentu, w którym stanął przed
+kamerą.
+
+Data przychodzi z przeglądarki, więc nie jest zaufana — przepuszcza ją
+`resolveRecordedAt` (`lib/domain/offline-queue.ts`): nie z przyszłości, nie
+starsza niż doba. Starsze braki to już decyzja kadrowa i idą przez panel,
+gdzie widać, kto co zmienił.
+
+**Wysyłkę odpala człowiek, nie automat.** Po powrocie łącza pas nad treścią
+(`app/offline-bar.tsx`) pokazuje listę tego, co powstało offline, i czeka na
+„Dopisz do bazy" albo „Odrzuć". Powód jest podwójny: dwie osoby mogły offline
+ruszyć to samo, a dopisywane wstecz odbicia to godziny obecności i wejścia
+z karnetów — ktoś ma je zobaczyć, zanim wejdą do rozliczeń. Nieudane pozycje
+zostają na liście z powodem odmowy; nigdy nie znikają po cichu.
+
+Każda pozycja przy dopisywaniu przechodzi **ponownie** przez strażnika
+i tę samą regułę co zapis na żywo (`app/offline-actions.ts`). Wspólne jądro
+zapisu obecności siedzi w `lib/services/attendance.ts`, żeby droga „na żywo"
+i droga „z kolejki" nie miały jak się rozjechać.
+
+Pomysł i uzasadnienie przeniesione z toPROductive (`src/sync/stanPolaczenia.js`
+i kolejka w `src/sync/dbServer.js`); tam kolejka obejmuje całą warstwę danych,
+bo aplikacja rozmawia z jednym `/api/dane`. Tutaj każdy zapis to osobna Server
+Action z własnymi regułami, więc kolejka jest wpinana świadomie, po jednym
+miejscu.
+
+### Service worker
+
+`public/sw.js` podaje z pamięci wyłącznie GET-y i wyłącznie te udane. Dwa
+adresy są z tego **wyłączone na sztywno**: `/api/*` i `/login`. Zwłaszcza
+`/api/zdrowie` — odpowiedź z cache'a znaczyłaby wskaźnik ONLINE przy
+wyciągniętym kablu, czyli dokładnie to kłamstwo, przed którym cały ten
+mechanizm ma chronić.
+
 ## Hasła kadry
 
 Konta trenerów powstały ze wspólnym hasłem tymczasowym wpisanym w skrypcie

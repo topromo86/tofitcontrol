@@ -3,6 +3,7 @@
 import { requireRole } from "@/lib/auth/guard";
 import { checkInAtStation } from "@/lib/services/class-qr";
 import { SCAN_REJECTION_MESSAGE } from "@/lib/domain/class-qr";
+import { RECORDED_AT_MESSAGE, resolveRecordedAt } from "@/lib/domain/offline-queue";
 import { formatTime } from "@/lib/format";
 
 // Wynik skanu pokazywany na kiosku. Zwracamy gotowy komunikat, bo kiosk stoi
@@ -16,9 +17,15 @@ const STATION_MESSAGE: Record<string, string> = {
   NO_OPEN_CLASS: "W tej sali nie ma teraz zajęć z aktywnym kodem.",
 };
 
+// `scannedAtIso` niesie godzinę odczytu kodu i pojawia się wyłącznie przy
+// dopisywaniu odbić z kolejki offline. To ważne właśnie tutaj: kod rotacyjny
+// żyje 30 sekund, więc sprawdzony wobec "teraz" po powrocie wifi zawsze byłby
+// wygasły. Sprawdzamy go wobec momentu, w którym stanął przed kamerą - a ten
+// moment i tak przechodzi przez resolveRecordedAt, bo pochodzi z przeglądarki.
 export async function stationScanAction(
   code: string,
   locationId: string,
+  scannedAtIso?: string,
 ): Promise<StationScanView> {
   // Skanuje zalogowane urządzenie klubu (konto KIOSK albo telefon personelu) -
   // to jest gwarancja, że kamera stoi na sali, a nie u kogoś w domu.
@@ -28,7 +35,14 @@ export async function stationScanAction(
   if (!cleaned) return { ok: false, message: "Pusty kod." };
   if (!locationId) return { ok: false, message: "Wybierz salę." };
 
-  const result = await checkInAtStation({ code: cleaned, locationId });
+  let scannedAt = new Date();
+  if (scannedAtIso) {
+    const czas = resolveRecordedAt(scannedAtIso, scannedAt);
+    if (!czas.ok) return { ok: false, message: RECORDED_AT_MESSAGE[czas.reason] };
+    scannedAt = czas.at;
+  }
+
+  const result = await checkInAtStation({ code: cleaned, locationId, now: scannedAt });
 
   if (!result.ok) {
     return {

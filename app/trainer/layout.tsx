@@ -8,6 +8,8 @@ import { ThemeToggle } from "../theme-toggle";
 import { LogoutButton } from "../logout-button";
 import { PanelFooter } from "../site-footer";
 import { AccountViewSwitch } from "../account-view-switch";
+import { ConnectionBadge } from "../connection-badge";
+import { OfflineBar } from "../offline-bar";
 
 export default async function TrainerLayout({ children }: { children: React.ReactNode }) {
   const { session, trainer } = await requireTrainerSelf();
@@ -82,12 +84,16 @@ export default async function TrainerLayout({ children }: { children: React.Reac
           </div>
           <div className="flex min-w-0 items-center gap-4">
             <HeaderNav groups={navGroups} />
+            <ConnectionBadge />
             {session.user.role === "ADMIN" ? <AccountViewSwitch current="trainer" /> : null}
             <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
       </header>
+      {/* Stan bazy nad treścią, a nie w ustawieniach: kto pracuje bez łącza,
+          ma to widzieć zanim zacznie ufać liczbom na ekranie. */}
+      <OfflineBar />
       <main className={`${PAGE_SHELL} flex-1 py-4`}>{children}</main>
       <PanelFooter />
     </div>

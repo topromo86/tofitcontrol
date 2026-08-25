@@ -11,6 +11,8 @@ import { SignedInAs } from "../signed-in-as";
 import { ThemeToggle } from "../theme-toggle";
 import { LogoutButton } from "../logout-button";
 import { PanelFooter } from "../site-footer";
+import { ConnectionBadge } from "../connection-badge";
+import { OfflineBar } from "../offline-bar";
 
 export default async function ClientLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -109,11 +111,15 @@ export default async function ClientLayout({ children }: { children: React.React
           </div>
           <div className="flex min-w-0 items-center gap-4">
             <HeaderNav groups={navGroups} />
+            <ConnectionBadge />
             <ThemeToggle />
             <LogoutButton />
           </div>
         </div>
       </header>
+      {/* Stan bazy nad treścią, a nie w ustawieniach: kto pracuje bez łącza,
+          ma to widzieć zanim zacznie ufać liczbom na ekranie. */}
+      <OfflineBar />
       {members.length === 0 ? (
         <main className={`${PAGE_SHELL} flex-1 py-4`}>
           <p className="text-muted-brand">

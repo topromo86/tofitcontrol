@@ -19,6 +19,7 @@ import {
   markManualAttendanceAction,
   respondToSubstituteAction,
 } from "./actions";
+import { OfflineForm } from "../offline-form";
 
 function formatTime(date: Date): string {
   return new Intl.DateTimeFormat("pl-PL", {
@@ -224,8 +225,11 @@ export default async function TrainerTodayPage() {
               Obecność potwierdzona: {s.attendanceConfirmedCount} os.
             </p>
           ) : (
-            <form
+            <OfflineForm
               action={confirmAttendanceAction}
+              op="POTWIERDZENIE_OBECNOSCI"
+              detail={`${s.name} · ${formatTime(s.startsAt)}`}
+              fields={["sessionId", "count"]}
               className="border-line-soft mt-2 flex flex-wrap items-center gap-2 rounded-md border p-2"
             >
               <input type="hidden" name="sessionId" value={s.id} />
@@ -242,7 +246,7 @@ export default async function TrainerTodayPage() {
               <Button type="submit" size="sm" variant="outline">
                 Potwierdź obecność
               </Button>
-            </form>
+            </OfflineForm>
           )}
 
           <ul className="mt-3 flex flex-col gap-2">
@@ -260,12 +264,17 @@ export default async function TrainerTodayPage() {
                         Obecny ({attendance.method === "QR" ? "QR" : "ręcznie"})
                       </span>
                     ) : (
-                      <form action={markManualAttendanceAction}>
+                      <OfflineForm
+                        action={markManualAttendanceAction}
+                        op="OBECNOSC_RECZNA"
+                        detail={`${b.member.firstName} ${b.member.lastName} · ${s.name}`}
+                        fields={["bookingId"]}
+                      >
                         <input type="hidden" name="bookingId" value={b.id} />
                         <Button type="submit" variant="outline" size="sm">
                           Zaznacz obecność
                         </Button>
-                      </form>
+                      </OfflineForm>
                     )}
                   </div>
 

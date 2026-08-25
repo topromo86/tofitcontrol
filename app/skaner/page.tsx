@@ -5,6 +5,8 @@ import { getClubSettings } from "@/lib/services/settings";
 import { isVisitValid } from "@/lib/domain/floor-checkin";
 import { todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
 import { formatTime } from "@/lib/format";
+import { ConnectionBadge } from "../connection-badge";
+import { OfflineBar } from "../offline-bar";
 import { Scanner } from "./scanner";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -26,7 +28,8 @@ export default async function ScannerStationPage({
     prisma.location.findMany({ orderBy: { name: "asc" } }),
     getClubSettings(),
   ]);
-  const activeLocationId = locations.find((l) => l.id === loc)?.id ?? locations[0]?.id ?? null;
+  const activeLocation = locations.find((l) => l.id === loc) ?? locations[0] ?? null;
+  const activeLocationId = activeLocation?.id ?? null;
 
   const now = new Date();
   const today = todayInTimeZone(now);
@@ -42,8 +45,16 @@ export default async function ScannerStationPage({
 
   return (
     <main className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col gap-5 p-4">
+      {/* Stacja stoi na sali i nie ma nad sobą nagłówka panelu, więc wskaźnik
+          połączenia i pas kolejki wchodzą tutaj - inaczej to jedyne miejsce
+          w systemie, gdzie brak bazy byłby niewidoczny. */}
+      <OfflineBar />
+
       <div>
-        <h1 className="font-display text-brand-red text-2xl tracking-wide">Stacja wejścia</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="font-display text-brand-red text-2xl tracking-wide">Stacja wejścia</h1>
+          <ConnectionBadge />
+        </div>
         <p className="text-muted-brand mt-1 text-sm">
           Zeskanuj osobisty kod QR klubowicza lub trenera, żeby odbić wejście na salę.
           {settings.floorMinMinutes > 0
@@ -74,7 +85,7 @@ export default async function ScannerStationPage({
       ) : null}
 
       {activeLocationId ? (
-        <Scanner locationId={activeLocationId} />
+        <Scanner locationId={activeLocationId} locationName={activeLocation?.name ?? null} />
       ) : (
         <p className="text-muted-brand border-line bg-surface rounded-md border p-4 text-sm">
           Brak lokalizacji w systemie.

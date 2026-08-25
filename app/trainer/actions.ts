@@ -10,8 +10,7 @@ import {
   validateAssignment,
   type AssignSubstituteError,
 } from "@/lib/domain/substitute";
-import { decrementPassEntryIfLimited } from "@/lib/services/pass";
-import { markJoinedIfNeeded } from "@/lib/services/member";
+import { confirmSessionAttendance, markManualAttendance } from "@/lib/services/attendance";
 import { confirmConsentDelivery } from "@/lib/services/consent-delivery";
 import { logActivity } from "@/lib/services/activity";
 import {
@@ -77,32 +76,20 @@ async function clearSubstitute(input: {
 
 // Ręczne uzupełnienie obecności przez trenera - method: MANUAL, wykluczone
 // z KPI (CLAUDE.md reguła 2: trener nie ocenia sam siebie własnymi wpisami).
+//
+// Sam zapis siedzi w lib/services/attendance.ts, bo tą samą drogą idą
+// obecności zaznaczone bez łącza i dopisane po powrocie sieci.
 export async function markManualAttendanceAction(formData: FormData) {
   const { trainer } = await requireTrainerSelf();
   const bookingId = String(formData.get("bookingId"));
 
   const booking = await prisma.booking.findUniqueOrThrow({
     where: { id: bookingId },
-    // Rodzaj zajęć decyduje, z którego karnetu zejdzie wejście.
-    include: { session: { select: { kind: true } } },
+    select: { sessionId: true },
   });
   await requireOwnsSession(booking.sessionId);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.attendance.upsert({
-      where: { sessionId_memberId: { sessionId: booking.sessionId, memberId: booking.memberId } },
-      create: {
-        sessionId: booking.sessionId,
-        memberId: booking.memberId,
-        method: "MANUAL",
-        recordedByUserId: trainer.userId,
-      },
-      update: {},
-    });
-    await tx.booking.update({ where: { id: bookingId }, data: { status: "ATTENDED" } });
-    await decrementPassEntryIfLimited(tx, booking.memberId, booking.session.kind);
-    await markJoinedIfNeeded(tx, booking.memberId, new Date());
-  });
+  await markManualAttendance({ bookingId, byUserId: trainer.userId, at: new Date() });
 
   revalidatePath("/trainer");
 }
@@ -327,31 +314,13 @@ export async function confirmAttendanceAction(formData: FormData) {
   const sessionId = String(formData.get("sessionId") ?? "");
   await requireOwnsSession(sessionId);
 
-  const klasa = await prisma.session.findUniqueOrThrow({
-    where: { id: sessionId },
-    include: { attendances: { select: { id: true } } },
+  const result = await confirmSessionAttendance({
+    sessionId,
+    byUserId: session.user.id,
+    rawCount: String(formData.get("count") ?? ""),
+    at: new Date(),
   });
-
-  const raw = String(formData.get("count") ?? "").trim();
-  const counted = raw ? Number(raw) : klasa.attendances.length;
-  if (!Number.isInteger(counted) || counted < 0 || counted > 500) {
-    redirect("/trainer?blad=liczba");
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.session.update({
-      where: { id: sessionId },
-      data: { attendanceConfirmedAt: new Date(), attendanceConfirmedCount: counted },
-    });
-    await logActivity(tx, {
-      actorUserId: session.user.id,
-      action: "SESSION_UPDATED",
-      summary:
-        counted === klasa.attendances.length
-          ? `Potwierdzono obecność na "${klasa.name}": ${counted} os.`
-          : `Potwierdzono obecność na "${klasa.name}": ${counted} os. (odbić: ${klasa.attendances.length})`,
-    });
-  });
+  if (!result.ok) redirect("/trainer?blad=liczba");
 
   revalidatePath("/trainer");
   revalidatePath("/admin/pulpit");
