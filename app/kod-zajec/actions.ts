@@ -55,6 +55,20 @@ export async function stationScanAction(
   }
 
   if (result.role === "TRAINER") {
+    // Odbicie trenera, który tych zajęć nie prowadzi, zapisujemy - ale kiosk
+    // ma powiedzieć wprost, co się właśnie stało. Człowiek przy kamerze musi
+    // wiedzieć, że klub dostał o tym powiadomienie, zanim odejdzie od tabletu.
+    if (!result.assigned) {
+      return {
+        ok: true,
+        title: "Odbity, ale nie jako przypisany prowadzący",
+        detail:
+          `${result.sessionName} · ${formatTime(result.startsAt)} · w grafiku prowadzi ` +
+          `${result.leadTrainerName}. Klub dostał powiadomienie - poproś o wpisanie zastępstwa.`,
+        warn: true,
+      };
+    }
+
     return {
       ok: true,
       title: "Prowadzący odbity",

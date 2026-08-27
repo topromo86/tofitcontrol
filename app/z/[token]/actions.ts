@@ -24,6 +24,12 @@ export async function confirmScanAction(formData: FormData) {
   revalidatePath("/kod-zajec");
 
   const ok =
-    result.role === "TRAINER" ? (result.late ? "trener-po-czasie" : "trener") : "klubowicz";
+    result.role !== "TRAINER"
+      ? "klubowicz"
+      : !result.assigned
+        ? "trener-nie-swoje"
+        : result.late
+          ? "trener-po-czasie"
+          : "trener";
   redirect(`/z/${token}?ok=${ok}`);
 }

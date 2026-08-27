@@ -8,6 +8,7 @@ import {
   TRAINER_CHECK_IN_LABEL,
   type TrainerCheckInState,
 } from "@/lib/domain/class-qr";
+import { effectiveTrainerId } from "@/lib/domain/substitute";
 import { formatPhone } from "@/lib/domain/phone";
 import { getClubSettings } from "@/lib/services/settings";
 
@@ -33,11 +34,29 @@ function time(date: Date): string {
   }).format(date);
 }
 
+// Konto prowadzącego - z uwzględnieniem potwierdzonego zastępstwa. Kafelek
+// musi mieć z czym porównać osobę, która się odbiła; inaczej cudze odbicie
+// świeciłoby na zielono jako "Trener odbity".
+function leadUserIdOf(session: {
+  trainerId: string;
+  substituteTrainerId: string | null;
+  substituteStatus: "PENDING" | "ACCEPTED" | "DECLINED" | null;
+  trainer: { userId: string };
+  substituteTrainer: { userId: string } | null;
+}): string {
+  return effectiveTrainerId(session) === session.trainerId
+    ? session.trainer.userId
+    : (session.substituteTrainer?.userId ?? session.trainer.userId);
+}
+
 const CHECK_IN_STYLE: Record<TrainerCheckInState, string> = {
   ON_TIME: "text-jade",
   LATE: "text-amber",
   MISSING: "text-red",
   PENDING: "text-muted-brand",
+  // Czerwień, nie pomarańcz: to nie jest "spóźnił się", tylko "prowadzi ktoś
+  // inny niż w grafiku" - i wymaga decyzji właściciela, nie tylko odnotowania.
+  OTHER_TRAINER: "text-red",
 };
 
 export default async function AdminDashboardPage() {
@@ -412,6 +431,8 @@ export default async function AdminDashboardPage() {
                           classifyTrainerCheckIn({
                             session: s,
                             checkedInAt: s.trainerCheckedInAt,
+                            checkedInUserId: s.trainerCheckedInUserId,
+                            leadUserId: leadUserIdOf(s),
                             now,
                             minutesBefore: settings.trainerCheckInMinutesBefore,
                           })
@@ -423,6 +444,8 @@ export default async function AdminDashboardPage() {
                           classifyTrainerCheckIn({
                             session: s,
                             checkedInAt: s.trainerCheckedInAt,
+                            checkedInUserId: s.trainerCheckedInUserId,
+                            leadUserId: leadUserIdOf(s),
                             now,
                             minutesBefore: settings.trainerCheckInMinutesBefore,
                           })

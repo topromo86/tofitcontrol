@@ -2,8 +2,16 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { checkScanTime, qrWindow, type ScanRejection } from "@/lib/domain/class-qr";
+import {
+  checkScanTime,
+  judgeTrainerScan,
+  qrWindow,
+  type ScanRejection,
+} from "@/lib/domain/class-qr";
 import { effectiveTrainerId } from "@/lib/domain/substitute";
+import { formatDayTime, formatTime } from "@/lib/format";
+import { alertAdmins } from "@/lib/services/admin-alert";
+import { logActivity } from "@/lib/services/activity";
 import { decrementPassEntryIfLimited } from "@/lib/services/pass";
 import { markJoinedIfNeeded } from "@/lib/services/member";
 import { verifyRotatingCode } from "@/lib/services/rotating-code";
@@ -43,7 +51,18 @@ export async function getOrCreateSessionQrToken(sessionId: string): Promise<stri
 
 export type ScanOutcome =
   | { ok: false; reason: ScanRejection }
-  | { ok: true; role: "TRAINER"; late: boolean; sessionName: string; startsAt: Date }
+  | {
+      ok: true;
+      role: "TRAINER";
+      late: boolean;
+      // false = odbił się trener, który tych zajęć nie prowadzi i nie ma
+      // potwierdzonego zastępstwa. Odbicie zapisujemy (ktoś te zajęcia
+      // poprowadził), ale kiosk mówi o tym wprost, a właściciel dostaje alert.
+      assigned: boolean;
+      leadTrainerName: string;
+      sessionName: string;
+      startsAt: Date;
+    }
   | { ok: true; role: "MEMBER"; memberName: string; sessionName: string; startsAt: Date };
 
 const SESSION_INCLUDE = {
@@ -62,6 +81,51 @@ function leadTrainerUserId(session: SessionWithTrainers): string {
     : (session.substituteTrainer?.userId ?? session.trainer.userId);
 }
 
+// Nazwisko prowadzącego - do komunikatu na kiosku i do alertu.
+function leadTrainerName(session: SessionWithTrainers): string {
+  return effectiveTrainerId(session) === session.trainerId
+    ? session.trainer.user.name
+    : (session.substituteTrainer?.user.name ?? session.trainer.user.name);
+}
+
+// Właściciel dowiaduje się DWIEMA drogami, bo mają różne wady: push przychodzi
+// od razu, ale bywa niedostarczony; wpis w historii nie przychodzi nigdzie, ale
+// nie da się go przegapić po fakcie. Alert o cudzym odbiciu musi przeżyć jedno
+// i drugie - to jest zdarzenie, po którym idą pieniądze (zastępstwo trzeba
+// wyklikać, żeby wynagrodzenie poszło do właściwej osoby).
+async function alertUnassignedTrainer(input: {
+  session: SessionWithTrainers;
+  scannerUserId: string;
+  scannerName: string;
+  at: Date;
+}): Promise<void> {
+  const kiedy = formatDayTime(input.session.startsAt);
+  const body =
+    `${input.scannerName} odbił(a) się o ${formatTime(input.at)} jako prowadzący na ` +
+    `"${input.session.name}" (${kiedy}). ` +
+    `W grafiku te zajęcia prowadzi ${leadTrainerName(input.session)}, a zastępstwo nie jest ` +
+    `potwierdzone. Jeśli to zamiana, wpisz ją w panelu - inaczej wynagrodzenie policzy się ` +
+    `dla osoby z grafiku.`;
+
+  // Ślad w historii idzie pierwszy i osobno od powiadomień: gdyby push albo
+  // poczta padły, zdarzenie i tak zostaje w /admin/aktywnosc.
+  try {
+    await logActivity(prisma, {
+      actorUserId: input.scannerUserId,
+      action: "TRAINER_CHECKIN_MISMATCH",
+      summary: body,
+    });
+  } catch {
+    // Nieudany zapis do historii nie może cofnąć odbicia na sali.
+  }
+
+  try {
+    await alertAdmins({ title: "Odbicie trenera bez przypisania", body, alsoEmail: true });
+  } catch {
+    // jw. - powiadomienie jest ważne, ale nie ważniejsze niż sama obecność.
+  }
+}
+
 // Odbicie konkretnej osoby na konkretnych zajęciach. Sedno całego modułu -
 // obie drogi (kod zajęć z ekranu, kod osobisty z kamery) kończą się tutaj,
 // więc reguły nie mają jak się rozjechać.
@@ -72,13 +136,18 @@ async function checkInUserToSession(input: {
   trainerCheckInMinutesBefore: number;
 }): Promise<ScanOutcome> {
   const { session, userId, now } = input;
+  const leadUserId = leadTrainerUserId(session);
+  const deadline = new Date(
+    session.startsAt.getTime() - input.trainerCheckInMinutesBefore * 60_000,
+  );
 
-  if (leadTrainerUserId(session) === userId) {
-    if (session.trainerCheckedInAt) return { ok: false, reason: "ALREADY_CHECKED_IN" };
+  // Odbicia sprzed wprowadzenia kolumny `trainerCheckedInUserId` mają samą
+  // godzinę, bez konta. Nie wiadomo o nich nic złego, więc czytamy je jako
+  // odbicie prowadzącego - inaczej stary wiersz wyglądałby jak rozjazd.
+  const checkedInUserId =
+    session.trainerCheckedInUserId ?? (session.trainerCheckedInAt ? leadUserId : null);
 
-    const deadline = new Date(
-      session.startsAt.getTime() - input.trainerCheckInMinutesBefore * 60_000,
-    );
+  async function zapiszOdbicieProwadzacego(assigned: boolean): Promise<ScanOutcome> {
     await prisma.session.update({
       where: { id: session.id },
       data: { trainerCheckedInAt: now, trainerCheckedInUserId: userId },
@@ -87,9 +156,23 @@ async function checkInUserToSession(input: {
       ok: true,
       role: "TRAINER",
       late: now > deadline,
+      assigned,
+      leadTrainerName: leadTrainerName(session),
       sessionName: session.name,
       startsAt: session.startsAt,
     };
+  }
+
+  if (leadUserId === userId) {
+    // Powtórka tej samej osoby przed kamerą - nic nowego.
+    if (checkedInUserId === userId) {
+      return { ok: false, reason: "ALREADY_CHECKED_IN" };
+    }
+    // Odbicie prowadzącego NADPISUJE wcześniejsze odbicie kogoś innego.
+    // Jeśli kolega odbił się o 17:50 jako zastępstwo, a prowadzący jednak
+    // przyszedł, to on prowadzi te zajęcia - i to jego godzina ma być
+    // w bazie. Ślad po tamtym odbiciu zostaje w historii aktywności.
+    return zapiszOdbicieProwadzacego(true);
   }
 
   // Klubowicz: odbić może się tylko ten, kto ma zapis. Konto opiekuna odbija
@@ -102,7 +185,37 @@ async function checkInUserToSession(input: {
     },
     include: { member: true },
   });
-  if (!booking) return { ok: false, reason: "NOT_ON_LIST" };
+  // Bez zapisu. Zanim odmówimy, sprawdzamy najczęstszy przypadek z sali: to
+  // nie jest obcy człowiek, tylko trener, który wziął zajęcia za kolegę
+  // i nikt nie zdążył wyklikać zastępstwa.
+  if (!booking) {
+    const scanner = await prisma.trainer.findUnique({
+      where: { userId },
+      select: { id: true, user: { select: { name: true } } },
+    });
+    const verdict = judgeTrainerScan({
+      leadUserId,
+      scannerUserId: userId,
+      scannerIsTrainer: scanner !== null,
+      trainerCheckedInUserId: checkedInUserId,
+    });
+
+    if (verdict === "STAND_IN" && scanner) {
+      const outcome = await zapiszOdbicieProwadzacego(false);
+      await alertUnassignedTrainer({
+        session,
+        scannerUserId: userId,
+        scannerName: scanner.user.name,
+        at: now,
+      });
+      return outcome;
+    }
+    // Prowadzący (albo inny zastępca) już się odbił, a ten trener nie ma tu
+    // zapisu - nie ma czego zastępować i nie ma o czym alarmować.
+    if (verdict === "CHECK_IN_TAKEN") return { ok: false, reason: "LEAD_ALREADY_CHECKED_IN" };
+
+    return { ok: false, reason: "NOT_ON_LIST" };
+  }
 
   const already = await prisma.attendance.findUnique({
     where: { sessionId_memberId: { sessionId: session.id, memberId: booking.memberId } },
@@ -111,7 +224,14 @@ async function checkInUserToSession(input: {
 
   await prisma.$transaction(async (tx) => {
     await tx.attendance.create({
-      data: { sessionId: session.id, memberId: booking.memberId, method: "QR" },
+      // Godzina skanu, nie godzina zapisu do bazy. Przy odbiciu dopisanym
+      // z kolejki offline te dwie różnią się o cały trening.
+      data: {
+        sessionId: session.id,
+        memberId: booking.memberId,
+        checkedInAt: now,
+        method: "QR",
+      },
     });
     await tx.booking.update({ where: { id: booking.id }, data: { status: "ATTENDED" } });
     // Wejście schodzi z karnetu pasującego do rodzaju zajęć - ta sama reguła
@@ -211,10 +331,33 @@ export async function checkInAtStation(input: {
   );
 
   const session = own.find((s) => s !== null) ?? null;
-  if (!session) return { ok: false, reason: "NOT_ON_LIST" };
+  if (session) {
+    return checkInUserToSession({
+      session,
+      userId: verdict.userId,
+      now,
+      trainerCheckInMinutesBefore: settings.trainerCheckInMinutesBefore,
+    });
+  }
+
+  // Nikt tu na tę osobę nie czeka: nie prowadzi żadnych z otwartych zajęć i nie
+  // ma na nie zapisu. Zanim odmówimy, sprawdzamy przypadek, który na sali jest
+  // codziennością: to trener, który wziął zajęcia za kolegę, a zastępstwa nikt
+  // nie zdążył wyklikać. Bez tego kiosk mówił mu "nie masz zapisu", zajęcia
+  // zostawały bez śladu prowadzącego, a właściciel nie dowiadywał się o niczym.
+  const scanner = await prisma.trainer.findUnique({
+    where: { userId: verdict.userId },
+    select: { id: true },
+  });
+  if (!scanner) return { ok: false, reason: "NOT_ON_LIST" };
+
+  // Zajęcia, na których nikt jeszcze nie odbił się jako prowadzący. Gdy takich
+  // nie ma, nie ma też czego zastępować - i nie ma o czym alarmować.
+  const standIn = open.find((s) => s.trainerCheckedInAt === null) ?? null;
+  if (!standIn) return { ok: false, reason: "LEAD_ALREADY_CHECKED_IN" };
 
   return checkInUserToSession({
-    session,
+    session: standIn,
     userId: verdict.userId,
     now,
     trainerCheckInMinutesBefore: settings.trainerCheckInMinutesBefore,

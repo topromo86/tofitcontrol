@@ -1052,6 +1052,10 @@ enum ActivityAction {
   SUBSTITUTE_DECLINED
   SUBSTITUTE_CANCELLED
   PLAN_CHANGED
+  // Na zajęciach odbił się trener, który ich nie prowadzi i nie ma
+  // potwierdzonego zastępstwa. Push do właściciela bywa niedostarczony,
+  // a to musi zostawić trwały ślad - patrz lib/services/class-qr.ts.
+  TRAINER_CHECKIN_MISMATCH
 }
 
 model ActivityLog {

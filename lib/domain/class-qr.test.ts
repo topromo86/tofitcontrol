@@ -3,6 +3,7 @@ import {
   checkScanTime,
   classifyTrainerCheckIn,
   isQrOpen,
+  judgeTrainerScan,
   qrWindow,
   trainerDeadline,
 } from "./class-qr";
@@ -98,5 +99,136 @@ describe("checkScanTime", () => {
     expect(checkScanTime({ ...session, status: "CANCELLED" }, minutesFromStart(-10), 15)).toBe(
       "SESSION_CANCELLED",
     );
+  });
+});
+
+describe("judgeTrainerScan", () => {
+  const LEAD = "user-prowadzacy";
+  const INNY = "user-inny-trener";
+
+  it("prowadzący to prowadzący", () => {
+    expect(
+      judgeTrainerScan({
+        leadUserId: LEAD,
+        scannerUserId: LEAD,
+        scannerIsTrainer: true,
+        trainerCheckedInUserId: null,
+      }),
+    ).toBe("LEAD");
+  });
+
+  it("klubowicz bez rekordu trenera idzie zwykłą drogą", () => {
+    expect(
+      judgeTrainerScan({
+        leadUserId: LEAD,
+        scannerUserId: "user-klubowicz",
+        scannerIsTrainer: false,
+        trainerCheckedInUserId: null,
+      }),
+    ).toBe("NOT_TRAINER");
+  });
+
+  it("inny trener przy braku odbicia to zastępstwo bez wpisu", () => {
+    expect(
+      judgeTrainerScan({
+        leadUserId: LEAD,
+        scannerUserId: INNY,
+        scannerIsTrainer: true,
+        trainerCheckedInUserId: null,
+      }),
+    ).toBe("STAND_IN");
+  });
+
+  it("inny trener, gdy prowadzący już się odbił - nie ma czego zastępować", () => {
+    expect(
+      judgeTrainerScan({
+        leadUserId: LEAD,
+        scannerUserId: INNY,
+        scannerIsTrainer: true,
+        trainerCheckedInUserId: LEAD,
+      }),
+    ).toBe("CHECK_IN_TAKEN");
+  });
+
+  it("druga próba tego samego zastępcy nie jest kolejnym zastępstwem", () => {
+    // Bez tego kamera widząca ten sam kod przez kilka klatek zasypywałaby
+    // właściciela powiadomieniami o jednym zdarzeniu.
+    expect(
+      judgeTrainerScan({
+        leadUserId: LEAD,
+        scannerUserId: INNY,
+        scannerIsTrainer: true,
+        trainerCheckedInUserId: INNY,
+      }),
+    ).toBe("CHECK_IN_TAKEN");
+  });
+
+  it("potwierdzony zastępca JEST prowadzącym - liczy się leadUserId, nie grafik", () => {
+    // leadUserId wylicza lib/domain/substitute.ts; tutaj sprawdzamy tylko, że
+    // ta funkcja nie ma własnego zdania na temat zastępstw.
+    expect(
+      judgeTrainerScan({
+        leadUserId: INNY,
+        scannerUserId: INNY,
+        scannerIsTrainer: true,
+        trainerCheckedInUserId: null,
+      }),
+    ).toBe("LEAD");
+  });
+});
+
+describe("classifyTrainerCheckIn - kto się odbił", () => {
+  const LEAD = "user-prowadzacy";
+  const INNY = "user-inny-trener";
+
+  it("odbicie prowadzącego w terminie zostaje na zielono", () => {
+    expect(
+      classifyTrainerCheckIn({
+        session,
+        checkedInAt: minutesFromStart(-10),
+        checkedInUserId: LEAD,
+        leadUserId: LEAD,
+        now: minutesFromStart(0),
+        minutesBefore: 5,
+      }),
+    ).toBe("ON_TIME");
+  });
+
+  it("odbicie kogoś innego nie jest 'trener odbity', choćby było w terminie", () => {
+    expect(
+      classifyTrainerCheckIn({
+        session,
+        checkedInAt: minutesFromStart(-10),
+        checkedInUserId: INNY,
+        leadUserId: LEAD,
+        now: minutesFromStart(0),
+        minutesBefore: 5,
+      }),
+    ).toBe("OTHER_TRAINER");
+  });
+
+  it("bez wiedzy o kontach zostaje sama punktualność", () => {
+    // Ekrany, które nie mają pod ręką prowadzącego, mają działać jak dotąd.
+    expect(
+      classifyTrainerCheckIn({
+        session,
+        checkedInAt: minutesFromStart(-10),
+        now: minutesFromStart(0),
+        minutesBefore: 5,
+      }),
+    ).toBe("ON_TIME");
+  });
+
+  it("brak odbicia po terminie to nadal MISSING, kimkolwiek jest prowadzący", () => {
+    expect(
+      classifyTrainerCheckIn({
+        session,
+        checkedInAt: null,
+        checkedInUserId: null,
+        leadUserId: LEAD,
+        now: minutesFromStart(0),
+        minutesBefore: 5,
+      }),
+    ).toBe("MISSING");
   });
 });

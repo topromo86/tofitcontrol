@@ -66,7 +66,10 @@ export function ConnectionBadge({ className }: { className?: string }) {
       ) : (
         <RefreshCw className="size-3.5" />
       )}
-      <span className="hidden sm:inline">{label}</span>
+      {/* Na telefonie sama ikona - dopóki wszystko działa. Gdy łącze padnie
+          albo coś czeka w kolejce, napis wchodzi na każdej szerokości: to jest
+          dokładnie ta chwila, w której nikt nie będzie się domyślał z ikonki. */}
+      <span className={offline || czeka > 0 ? "inline" : "hidden sm:inline"}>{label}</span>
     </button>
   );
 }

@@ -26,11 +26,28 @@ import { KioskClock } from "./kiosk-clock";
 // dotykania tabletu. Bez JS - zwykły <meta refresh>.
 const REFRESH_SECONDS = 30;
 
+// Konto prowadzącego - z uwzględnieniem potwierdzonego zastępstwa. Bez tego
+// kafelek nie ma z czym porównać osoby, która się odbiła.
+function leadUserIdOf(session: {
+  trainerId: string;
+  substituteTrainerId: string | null;
+  substituteStatus: "PENDING" | "ACCEPTED" | "DECLINED" | null;
+  trainer: { userId: string };
+  substituteTrainer: { userId: string } | null;
+}): string {
+  return effectiveTrainerId(session) === session.trainerId
+    ? session.trainer.userId
+    : (session.substituteTrainer?.userId ?? session.trainer.userId);
+}
+
 const STATE_STYLE: Record<TrainerCheckInState, string> = {
   ON_TIME: "text-jade",
   LATE: "text-amber",
   MISSING: "text-red",
   PENDING: "text-muted-brand",
+  // Czerwień, nie pomarańcz: to nie jest "spóźnił się", tylko "prowadzi ktoś
+  // inny niż w grafiku" - i wymaga decyzji właściciela, nie tylko odnotowania.
+  OTHER_TRAINER: "text-red",
 };
 
 export default async function ClassQrStationPage({
@@ -92,6 +109,8 @@ export default async function ClassQrStationPage({
         state: classifyTrainerCheckIn({
           session: s,
           checkedInAt: s.trainerCheckedInAt,
+          checkedInUserId: s.trainerCheckedInUserId,
+          leadUserId: leadUserIdOf(s),
           now,
           minutesBefore: settings.trainerCheckInMinutesBefore,
         }),

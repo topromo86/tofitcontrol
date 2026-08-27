@@ -197,6 +197,55 @@ adresy są z tego **wyłączone na sztywno**: `/api/*` i `/login`. Zwłaszcza
 wyciągniętym kablu, czyli dokładnie to kłamstwo, przed którym cały ten
 mechanizm ma chronić.
 
+## Kto prowadzi zajecia, a kto sie odbil
+
+Kiosk zapisywal godzine odbicia prowadzacego, ale nikt nie sprawdzal, czy
+odbija sie TEN prowadzacy. Kolega, ktory wzial zajecia za chorego i nie
+wyklikal zastepstwa, dostawal "nie masz zapisu na te zajecia" - zajecia
+zostawaly bez sladu prowadzacego, a wlasciciel nie dowiadywal sie o niczym.
+
+Rozstrzygniecie siedzi w `judgeTrainerScan` (`lib/domain/class-qr.ts`) i ma
+cztery wyniki:
+
+| kto stanal przed kamera | co robimy |
+| --- | --- |
+| prowadzacy (z grafiku albo **potwierdzony** zastepca) | odbicie jak dotad |
+| inny trener, nikt sie jeszcze nie odbil | odbicie **zapisujemy** + alert do wlasciciela |
+| inny trener, ale odbicie prowadzacego juz jest | odmowa, bez alertu |
+| nie trener | zwykla droga klubowicza (zapis na liscie) |
+
+**Odbicie zastepcze zapisujemy, a nie odrzucamy.** Ktos te zajecia poprowadzil
+i klub ma to widziec; odmowa zostawialaby zajecia z komunikatem "brak odbicia
+trenera", czyli z gorsza informacja niz zadna.
+
+Gdy przypisany prowadzacy odbije sie pozniej, jego odbicie **nadpisuje**
+zastepcze - to on prowadzi zajecia i jego godzina ma byc w bazie. Slad po
+tamtym odbiciu zostaje w historii aktywnosci.
+
+Tylko PIERWSZY zastepczy skan zaklada odbicie, wiec kamera widzaca ten sam kod
+przez kilkanascie klatek nie zasypuje wlasciciela powiadomieniami.
+
+### Jak dowiaduje sie wlasciciel
+
+Trzema drogami, bo kazda ma inna wade:
+
+- **push** do wszystkich kont ADMIN - przychodzi od razu, ale bywa
+  niedostarczony (brak zgody w przegladarce, wygasla subskrypcja),
+- **e-mail** do tych samych kont - dochodzi pozniej, za to zostaje,
+- **wpis w `/admin/aktywnosc`** (`TRAINER_CHECKIN_MISMATCH`) - nie przychodzi
+  nigdzie, ale nie da sie go przegapic po fakcie.
+
+Zaden z tych kanalow nie ma prawa wywrocic samego odbicia - obecnosc na sali
+jest wazniejsza niz powiadomienie o niej. Wysylka siedzi w
+`lib/services/admin-alert.ts`.
+
+### Gdzie to widac na ekranach
+
+`classifyTrainerCheckIn` ma stan `OTHER_TRAINER` ("Odbil sie inny trener",
+czerwony) - na pulpicie wlasciciela, na kiosku i w panelu trenera. Zielone
+"Trener odbity" przy cudzym odbiciu byloby klamstwem, ktorego wlasciciel nie ma
+jak wylapac: patrzy na kafelek, nie w baze.
+
 ## Hasła kadry
 
 Konta trenerów powstały ze wspólnym hasłem tymczasowym wpisanym w skrypcie

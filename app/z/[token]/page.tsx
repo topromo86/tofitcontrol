@@ -73,13 +73,19 @@ export default async function ScanPage({
       {ok ? (
         <p
           role="status"
-          className="border-jade/40 bg-jade/10 text-jade w-full rounded-md border p-3 text-center text-sm"
+          className={`w-full rounded-md border p-3 text-center text-sm ${
+            ok === "trener-nie-swoje"
+              ? "border-amber/50 bg-amber/10 text-amber"
+              : "border-jade/40 bg-jade/10 text-jade"
+          }`}
         >
           {ok === "trener"
             ? "Odbicie prowadzącego zapisane. Miłego treningu!"
             : ok === "trener-po-czasie"
               ? `Odbicie zapisane, ale po terminie (${settings.trainerCheckInMinutesBefore} min przed startem). Właściciel to zobaczy.`
-              : "Obecność zaliczona. Miłego treningu!"}
+              : ok === "trener-nie-swoje"
+                ? "Odbicie zapisane, ale tych zajęć nie prowadzisz według grafiku i nie masz potwierdzonego zastępstwa. Klub dostał o tym powiadomienie."
+                : "Obecność zaliczona. Miłego treningu!"}
         </p>
       ) : null}
 

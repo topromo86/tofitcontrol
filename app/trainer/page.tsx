@@ -3,12 +3,12 @@ import { requireTrainerSelf } from "@/lib/auth/guard";
 import { addCalendarDays, todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { seesSessionWhere } from "@/lib/domain/substitute";
+import { effectiveTrainerId, seesSessionWhere } from "@/lib/domain/substitute";
 import { formatDayTime } from "@/lib/format";
 import {
   classifyTrainerCheckIn,
   TRAINER_CHECK_IN_LABEL,
-  trainerDeadline,
+  type TrainerCheckInState,
 } from "@/lib/domain/class-qr";
 import { getClubSettings } from "@/lib/services/settings";
 import {
@@ -20,6 +20,30 @@ import {
   respondToSubstituteAction,
 } from "./actions";
 import { OfflineForm } from "../offline-form";
+
+// Odbicie prowadzącego: kolor idzie za stanem, nie za samą godziną. Doszedł
+// stan "odbił się inny trener" - dawny warunek na trainerCheckedInAt nie miał
+// jak go pokazać, bo nie wiedział, KTO się odbił.
+const CHECK_IN_STYLE: Record<TrainerCheckInState, string> = {
+  ON_TIME: "text-jade",
+  LATE: "text-amber",
+  MISSING: "text-red",
+  PENDING: "text-muted-brand",
+  OTHER_TRAINER: "text-red",
+};
+
+// Konto prowadzącego - z uwzględnieniem potwierdzonego zastępstwa.
+function leadUserIdOf(session: {
+  trainerId: string;
+  substituteTrainerId: string | null;
+  substituteStatus: "PENDING" | "ACCEPTED" | "DECLINED" | null;
+  trainer: { userId: string };
+  substituteTrainer: { userId: string } | null;
+}): string {
+  return effectiveTrainerId(session) === session.trainerId
+    ? session.trainer.userId
+    : (session.substituteTrainer?.userId ?? session.trainer.userId);
+}
 
 function formatTime(date: Date): string {
   return new Intl.DateTimeFormat("pl-PL", {
@@ -193,28 +217,19 @@ export default async function TrainerTodayPage() {
           {/* Stan odbić na tych zajęciach: czy prowadzący się odbił i ile
               osób odbiło kod. Zatwierdzenie zamyka listę. */}
           <div className="border-line-soft bg-surface-2 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border p-2 font-mono text-xs">
-            <span
-              className={
-                s.trainerCheckedInAt
-                  ? s.trainerCheckedInAt <= trainerDeadline(s, settings.trainerCheckInMinutesBefore)
-                    ? "text-jade"
-                    : "text-amber"
-                  : now > trainerDeadline(s, settings.trainerCheckInMinutesBefore)
-                    ? "text-red"
-                    : "text-muted-brand"
-              }
-            >
-              {
-                TRAINER_CHECK_IN_LABEL[
-                  classifyTrainerCheckIn({
-                    session: s,
-                    checkedInAt: s.trainerCheckedInAt,
-                    now,
-                    minutesBefore: settings.trainerCheckInMinutesBefore,
-                  })
-                ]
-              }
-            </span>
+            {(() => {
+              const checkIn = classifyTrainerCheckIn({
+                session: s,
+                checkedInAt: s.trainerCheckedInAt,
+                checkedInUserId: s.trainerCheckedInUserId,
+                leadUserId: leadUserIdOf(s),
+                now,
+                minutesBefore: settings.trainerCheckInMinutesBefore,
+              });
+              return (
+                <span className={CHECK_IN_STYLE[checkIn]}>{TRAINER_CHECK_IN_LABEL[checkIn]}</span>
+              );
+            })()}
             <span className="text-muted-brand">
               Odbić: {s.attendances.length}/{s.bookings.length}
             </span>

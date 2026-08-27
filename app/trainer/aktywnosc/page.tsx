@@ -13,6 +13,7 @@ const ACTION_LABEL: Record<string, string> = {
   NOTE_ADDED: "Dodano notatkę",
   ONBOARDING_STEP_COMPLETED: "Zamknięto etap onboardingu",
   RETENTION_TASK_CLOSED: "Zamknięto zadanie retencyjne",
+  TRAINER_CHECKIN_MISMATCH: "Odbicie trenera bez przypisania",
 };
 
 type SearchParams = { sort?: string };

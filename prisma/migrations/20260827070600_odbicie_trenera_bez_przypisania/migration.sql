@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ActivityAction" ADD VALUE 'TRAINER_CHECKIN_MISMATCH';
