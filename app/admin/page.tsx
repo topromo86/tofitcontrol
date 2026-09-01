@@ -266,6 +266,14 @@ export default async function AdminMembersPage({
                     <p className="text-text font-medium">
                       {m.firstName} {m.lastName}
                       {m.isMinor ? " (dziecko)" : ""}
+                      {/* Kartoteka demonstracyjna ma być rozpoznawalna na liście,
+                          a nie dopiero po wejściu w kartę - inaczej ktoś zadzwoni
+                          do klienta, którego nie ma. */}
+                      {m.isDemo ? (
+                        <span className="border-amber text-amber ml-2 rounded border px-1.5 py-0.5 font-mono text-[10px] tracking-widest uppercase">
+                          demo
+                        </span>
+                      ) : null}
                     </p>
                     {isFrozen ? (
                       <p className="text-muted-brand font-mono text-xs">

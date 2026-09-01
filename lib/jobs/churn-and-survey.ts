@@ -13,7 +13,9 @@ export async function churnAndSurvey(
   now: Date = new Date(),
 ): Promise<ChurnAndSurveyResult> {
   const activeMembers = await prisma.member.findMany({
-    where: { status: "ACTIVE" },
+    // isDemo: false - job przestawia status na CHURNED i zakłada ankietę,
+    // czyli zmienia i tworzy rekordy poza spisem danych demonstracyjnych.
+    where: { status: "ACTIVE", isDemo: false },
     include: {
       attendances: { where: { method: "QR" }, orderBy: { checkedInAt: "desc" }, take: 1 },
     },

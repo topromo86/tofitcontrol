@@ -13,6 +13,8 @@ const ACTION_LABEL: Record<string, string> = {
   ONBOARDING_STEP_COMPLETED: "Zamknięto etap onboardingu",
   RETENTION_TASK_CLOSED: "Zamknięto zadanie retencyjne",
   TRAINER_CHECKIN_MISMATCH: "Odbicie trenera bez przypisania",
+  DEMO_DATA_LOADED: "Wgrano dane demonstracyjne",
+  DEMO_DATA_REMOVED: "Usunięto dane demonstracyjne",
 };
 
 type SearchParams = { actorId?: string; sort?: string };

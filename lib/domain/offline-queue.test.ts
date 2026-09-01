@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFlushOutcomes,
+  autoSendable,
   countLabel,
   MAX_OFFLINE_AGE_HOURS,
   offlineSinceLabel,
+  rejectedEntries,
   resolveRecordedAt,
   type OfflineEntry,
 } from "./offline-queue";
@@ -119,5 +121,36 @@ describe("applyFlushOutcomes", () => {
   it("zostawia nietknięte to, o czym serwer nic nie powiedział", () => {
     const left = applyFlushOutcomes(entries, [{ id: "a", ok: true }]);
     expect(left).toEqual([entries[1]]);
+  });
+});
+
+describe("autoSendable", () => {
+  const swiezy: OfflineEntry = {
+    id: "a",
+    op: "WEJSCIE_NA_SALE",
+    recordedAtIso: minutesAgo(5),
+    detail: "Jan Kowalski",
+    payload: {},
+  };
+  const odrzucony: OfflineEntry = {
+    id: "b",
+    op: "OBECNOSC_RECZNA",
+    recordedAtIso: minutesAgo(9),
+    detail: "Anna Nowak",
+    payload: {},
+    error: "Rezerwacja zniknęła.",
+  };
+
+  it("automat bierze tylko to, czego baza jeszcze nie odrzuciła", () => {
+    expect(autoSendable([swiezy, odrzucony])).toEqual([swiezy]);
+  });
+
+  it("odrzucone zostaje do decyzji człowieka", () => {
+    // Bez tego przy każdym pingu leciałby ten sam odrzucany zapis.
+    expect(rejectedEntries([swiezy, odrzucony])).toEqual([odrzucony]);
+  });
+
+  it("po samych odmowach nie ma czego wysyłać automatem", () => {
+    expect(autoSendable([odrzucony])).toEqual([]);
   });
 });

@@ -79,6 +79,37 @@ export async function refundPassEntry(tx: Tx, passId: string) {
 // jednej transakcji. Współdzielone przez ekran admina i ekran „Kasa" trenera -
 // gotówka realnie zmienia ręce przy trenerze, na sali, więc to on najczęściej
 // wykonuje tę akcję (CLAUDE.md: kasa musi działać w 15 s na telefonie).
+// Strażnik mieszania demo z danymi klubu. Jedno miejsce, bo sprzedaż i dopłata
+// mają tę samą regułę, a rozjazd między nimi byłby dziurą.
+function assertNoDemoMix(input: {
+  member: { isDemo: boolean; firstName: string; lastName: string };
+  plan: { isDemo: boolean; name: string };
+  location: { isDemo: boolean; name: string };
+  method: PaymentMethod;
+}): void {
+  const { member, plan, location, method } = input;
+
+  if (member.isDemo !== plan.isDemo) {
+    throw new SaleError(
+      member.isDemo
+        ? `${member.firstName} ${member.lastName} to kartoteka demonstracyjna - wybierz karnet z demonstracyjnego cennika. Karnet z cennika klubu zostawiłby po sobie licznik sprzedaży i wpłatę w kasie klubu.`
+        : `"${plan.name}" to demonstracyjny rodzaj karnetu - nie sprzedawaj go prawdziwemu klientowi. Po usunięciu danych demonstracyjnych ten karnet nie miałby się do czego odnosić.`,
+    );
+  }
+
+  if (member.isDemo && !location.isDemo) {
+    throw new SaleError(
+      `Sprzedaż demonstracyjna musi być zapisana w sali pokazowej, a nie w "${location.name}". Wpłata w prawdziwej sali weszłaby do zamknięcia kasy klubu, którego nie da się później otworzyć.`,
+    );
+  }
+
+  if (member.isDemo && method === "CASH") {
+    throw new SaleError(
+      "Demonstracyjna wpłata nie może być gotówką: kasa sumuje gotówkę per sala i dzień, a zamkniętego dnia nie da się w tym systemie otworzyć. Wybierz przelew albo BLIK.",
+    );
+  }
+}
+
 export async function sellPass(
   tx: Tx,
   params: {
@@ -97,14 +128,24 @@ export async function sellPass(
     paidGross?: number;
   },
 ) {
-  const [plan, currentActivePass, member] = await Promise.all([
+  const [plan, currentActivePass, member, location] = await Promise.all([
     tx.plan.findUniqueOrThrow({ where: { id: params.planId } }),
     tx.pass.findFirst({
       where: { memberId: params.memberId, status: "ACTIVE" },
       orderBy: { endsAt: "desc" },
     }),
     tx.member.findUniqueOrThrow({ where: { id: params.memberId } }),
+    tx.location.findUniqueOrThrow({ where: { id: params.locationId } }),
   ]);
+
+  // Dane demonstracyjne i dane klubu nie mieszają się w pieniądzach.
+  //
+  // Generator trzyma demo osobno (własna sala, własny cennik), ale ten ekran
+  // pozwala wybrać dowolne połączenie - i każde z nich zostawia trwały ślad
+  // po usunięciu demo: wpłata demonstracyjnego klienta w prawdziwej sali
+  // wchodzi do zamknięcia kasy, którego nie da się już otworzyć, a karnet
+  // prawdziwego klienta na demonstracyjnym cenniku blokuje usunięcie demo.
+  assertNoDemoMix({ member, plan, location, method: params.method });
 
   // 1. Kod rabatowy: obniża cenę planu. Walidacja w transakcji, żeby limit
   //    użyć i termin liczyły się na moment sprzedaży, nie na podgląd wcześniej.
@@ -244,6 +285,11 @@ export async function recordPassPayment(
     where: { id: params.passId },
     include: { plan: true, member: true, payments: { select: { amountGross: true } } },
   });
+
+  // Ta sama reguła co przy sprzedaży - dopłata to też wpłata i tak samo
+  // wchodzi do kasy sali, którą wskaże formularz.
+  const location = await tx.location.findUniqueOrThrow({ where: { id: params.locationId } });
+  assertNoDemoMix({ member: pass.member, plan: pass.plan, location, method: params.method });
 
   const before = settlePass(pass.priceGross, sumPayments(pass.payments));
   if (before.outstandingGross === 0) {

@@ -34,12 +34,19 @@ export async function computeScores(
   const maturityThreshold = new Date(now.getTime() - MATURITY_DAYS * 86_400_000);
   const windowStart = new Date(now.getTime() - MATURITY_DAYS * 86_400_000);
 
-  const trainers = await prisma.trainer.findMany({ where: { active: true } });
+  // isDemo: false - trener demonstracyjny nie ma po co trafiać do rankingu
+  // klubu. Jego klienci są odfiltrowani niżej, więc i tak dostałby pusty wynik.
+  const trainers = await prisma.trainer.findMany({
+    where: { active: true, user: { isDemo: false } },
+  });
 
   // Retencja klubu per segment (dzieci/dorośli) - policzona raz, współdzielona
   // przez wszystkich trenerów (lib/domain/scoring.ts#weightedClubSegmentRet90).
+  // isDemo: false - to jest wspólny mianownik retencji dla KAŻDEGO trenera,
+  // a wynik przekłada się przez bonusForScore na realną premię. Klubowicz
+  // demonstracyjny przesuwałby liczbę, według której klub płaci ludziom.
   const clubMatured = await prisma.member.findMany({
-    where: { joinedAt: { not: null, lte: maturityThreshold } },
+    where: { joinedAt: { not: null, lte: maturityThreshold }, isDemo: false },
     select: { status: true, isMinor: true },
   });
   const clubRet90ByGroup = {
@@ -51,7 +58,11 @@ export async function computeScores(
 
   for (const trainer of trainers) {
     const matured = await prisma.member.findMany({
-      where: { ownerTrainerId: trainer.id, joinedAt: { not: null, lte: maturityThreshold } },
+      where: {
+        ownerTrainerId: trainer.id,
+        joinedAt: { not: null, lte: maturityThreshold },
+        isDemo: false,
+      },
       select: { status: true, isMinor: true },
     });
     const maturedCount = matured.length;

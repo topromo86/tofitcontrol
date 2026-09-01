@@ -20,7 +20,9 @@ export async function renewalReminders(
     where: {
       status: { in: ["ACTIVE", "EXPIRED"] },
       endsAt: { gte: windowStart, lte: windowEnd },
-      member: { status: "ACTIVE" },
+      // isDemo: false - job zakłada zadanie RENEWAL i wysyła powiadomienie.
+      // Jedno i drugie dotyczyłoby osoby, która nie istnieje.
+      member: { status: "ACTIVE", isDemo: false },
     },
     include: { member: true },
     orderBy: { endsAt: "desc" },

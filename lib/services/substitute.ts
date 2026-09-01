@@ -13,9 +13,9 @@ import { formatDayTime } from "@/lib/format";
 export async function notifyUser(userId: string, title: string, body: string): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { pushSubscription: true },
+    select: { pushSubscription: true, isDemo: true },
   });
-  if (!user?.pushSubscription) return;
+  if (!user?.pushSubscription || user.isDemo) return;
   await sendPushNotification(user.pushSubscription as never, { title, body });
 }
 

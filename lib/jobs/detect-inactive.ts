@@ -15,7 +15,10 @@ export async function detectInactive(
   now: Date = new Date(),
 ): Promise<DetectInactiveResult> {
   const activeMembers = await prisma.member.findMany({
-    where: { status: "ACTIVE", joinedAt: { not: null } },
+    // isDemo: false - klient demonstracyjny nie ma dostawać alertu retencyjnego.
+    // Job zakłada RetentionTask, którego spis danych demo nie zna, więc bez tego
+    // filtra "usuń demo" zostawiałoby po sobie zadania dla trenera.
+    where: { status: "ACTIVE", joinedAt: { not: null }, isDemo: false },
     include: {
       attendances: { orderBy: { checkedInAt: "desc" }, take: 1 },
       absenceReports: { where: { resolvedAt: null }, take: 1 },

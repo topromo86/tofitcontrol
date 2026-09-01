@@ -14,8 +14,8 @@ import { cn } from "@/lib/utils";
 //
 // Trzy stany, trzy kolory:
 //   zielony  - baza odpowiada, zapisy idą od razu,
-//   pomarańcz - baza odpowiada, ale coś czeka na dopisanie z kolejki offline,
-//   czerwony - brak kontaktu z bazą, zapisy idą do kolejki.
+//   pomarańcz - baza odpowiada, a kolejka offline właśnie do niej jedzie,
+//   czerwony - brak kontaktu z bazą, zapisy czekają na urządzeniu.
 export function ConnectionBadge({ className }: { className?: string }) {
   const { mode, offlineSince } = useConnection();
   const entries = useOfflineQueue();
@@ -29,15 +29,15 @@ export function ConnectionBadge({ className }: { className?: string }) {
     ? ["OFFLINE", offlineSinceLabel(offlineSince, tick), czekaOpis].filter(Boolean).join(" · ")
     : mode === "online"
       ? czeka > 0
-        ? `Online · ${czekaOpis} do dopisania`
+        ? `Online · ${czekaOpis} w kolejce`
         : "Online · baza"
       : "Sprawdzam łącze…";
 
   const title = offline
-    ? "Brak kontaktu z bazą. Odbicia i obecności zapisują się na tym urządzeniu i czekają na Twoją zgodę na dopisanie. Kliknij, żeby spróbować połączyć się ponownie."
+    ? "Brak kontaktu z bazą. Odbicia i obecności zapisują się na tym urządzeniu i pójdą do bazy same, gdy wróci sieć. Kliknij, żeby spróbować połączyć się ponownie."
     : mode === "online"
       ? czeka > 0
-        ? "Baza odpowiada, ale zapisy zrobione bez łącza czekają na dopisanie - potwierdź je w pasku nad treścią."
+        ? "Baza odpowiada, a zapisy zrobione bez łącza właśnie do niej jadą. Szczegóły w pasku nad treścią."
         : "Zapisy idą prosto do bazy klubu. Kliknij, żeby sprawdzić połączenie."
       : "Sprawdzam, czy baza odpowiada.";
 

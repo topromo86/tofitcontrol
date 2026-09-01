@@ -87,7 +87,7 @@ export default async function QrCheckInPage({
                 op="MELDUNEK_KLUBOWICZA"
                 detail={`${member.firstName} ${member.lastName} · ${booking.session.name}`}
                 fields={["bookingId"]}
-                offlineLabel="Zapisane bez sieci - wyślij po powrocie zasięgu"
+                offlineLabel="Zapisane bez sieci - wyśle się samo po powrocie zasięgu"
               >
                 <input type="hidden" name="bookingId" value={booking.id} />
                 <Button type="submit" className="mt-3 w-full">

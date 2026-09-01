@@ -79,7 +79,7 @@ export function Scanner({
         });
         setResult(null);
         setQueued(
-          "Brak łącza - wejście zapisane na tym urządzeniu. Dopiszesz je do bazy po powrocie sieci.",
+          "Brak łącza - wejście zapisane na tym urządzeniu. Pójdzie do bazy samo, gdy wróci sieć.",
         );
       };
 

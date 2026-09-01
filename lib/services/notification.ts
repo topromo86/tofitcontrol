@@ -51,9 +51,13 @@ export async function notify(input: {
 }): Promise<NotifyResult> {
   const user = await prisma.user.findUnique({
     where: { id: input.userId },
-    select: { email: true, phone: true, pushSubscription: true },
+    select: { email: true, phone: true, pushSubscription: true, isDemo: true },
   });
   if (!user) return "NO_CHANNEL";
+  // Konto demonstracyjne nie ma właściciela. Push nigdzie nie dojdzie, e-mail
+  // poleci na domenę .invalid i wróci odbiciem, a SMS jest płatny za sztukę -
+  // to jedyne miejsce, przez które przechodzą wszystkie trzy kanały naraz.
+  if (user.isDemo) return "NO_CHANNEL";
 
   const prefs = await getPreferences(input.userId);
 

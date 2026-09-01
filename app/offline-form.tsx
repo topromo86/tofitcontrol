@@ -24,7 +24,7 @@ export function OfflineForm({
   detail,
   fields,
   className,
-  offlineLabel = "Zapisane na urządzeniu - czeka na dopisanie",
+  offlineLabel = "Zapisane na urządzeniu - pójdzie do bazy po powrocie sieci",
   children,
 }: {
   action: (formData: FormData) => void | Promise<void>;

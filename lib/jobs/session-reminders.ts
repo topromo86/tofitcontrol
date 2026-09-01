@@ -105,8 +105,10 @@ export async function sessionReminders(
     return { remindersSent, suggestionsSent };
   }
 
+  // isDemo: false - inaczej klub wysyłałby przypomnienia (a przy braku push
+  // i e-maila płatne SMS-y) na konta demonstracyjne.
   const members = await prisma.member.findMany({
-    where: { status: "ACTIVE" },
+    where: { status: "ACTIVE", isDemo: false },
     include: { user: true, guardianUser: true },
   });
 

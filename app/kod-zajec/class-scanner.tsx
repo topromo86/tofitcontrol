@@ -73,7 +73,7 @@ export function ClassScanner({
         });
         setResult(null);
         setQueued(
-          "Brak łącza - odbicie zapisane na tym urządzeniu z godziną skanu. Dopiszesz je po powrocie sieci.",
+          "Brak łącza - odbicie zapisane na tym urządzeniu z godziną skanu. Pójdzie do bazy samo, gdy wróci sieć.",
         );
       };
 

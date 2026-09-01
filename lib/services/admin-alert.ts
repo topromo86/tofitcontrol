@@ -22,7 +22,9 @@ export async function alertAdmins(input: {
   alsoEmail?: boolean;
 }): Promise<void> {
   const admins = await prisma.user.findMany({
-    where: { role: "ADMIN" },
+    // Generator danych demo nie zakłada kont ADMIN, ale gdyby kiedyś zaczął,
+    // alerty klubu nie mają prawa polecieć na fikcyjne adresy.
+    where: { role: "ADMIN", isDemo: false },
     select: { id: true, email: true, pushSubscription: true },
   });
 

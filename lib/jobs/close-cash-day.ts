@@ -18,6 +18,10 @@ export async function closeCashDay(
   const sqlDate = new Date(Date.UTC(date.year, date.month - 1, date.day));
 
   for (const location of locations) {
+    // Sala pokazowa nie ma kasy do zamknięcia. Bez tego nocny job zakładałby
+    // dla niej CashDay poza spisem danych demo - a przez RESTRICT ten wiersz
+    // zablokowałby potem usunięcie sali.
+    if (location.isDemo) continue;
     const sum = await prisma.payment.aggregate({
       where: {
         locationId: location.id,

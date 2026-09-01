@@ -110,6 +110,21 @@ export function offlineSinceLabel(since: number | null, now: number): string {
   return `od ${minutes} min`;
 }
 
+// Zapisy, które wolno wysłać SAMEMU, bez pytania człowieka: te, których baza
+// jeszcze nie odrzuciła.
+//
+// Pozycja z powodem odmowy zostaje na ekranie i czeka na decyzję. Gdyby automat
+// próbował jej dalej, przy każdym pingu leciałby ten sam odrzucany zapis -
+// a odmowa zwykle nie jest chwilowa (wygasła rezerwacja, brak uprawnień,
+// zapis starszy niż doba). Ponowną próbę odpala człowiek.
+export function autoSendable(entries: OfflineEntry[]): OfflineEntry[] {
+  return entries.filter((entry) => !entry.error);
+}
+
+export function rejectedEntries(entries: OfflineEntry[]): OfflineEntry[] {
+  return entries.filter((entry) => Boolean(entry.error));
+}
+
 export type FlushOutcome = { id: string; ok: boolean; error?: string };
 
 // Wynik wysyłki nanoszony na kolejkę: udane znikają, nieudane zostają z

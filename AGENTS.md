@@ -171,12 +171,31 @@ Data przychodzi z przeglądarki, więc nie jest zaufana — przepuszcza ją
 starsza niż doba. Starsze braki to już decyzja kadrowa i idą przez panel,
 gdzie widać, kto co zmienił.
 
-**Wysyłkę odpala człowiek, nie automat.** Po powrocie łącza pas nad treścią
-(`app/offline-bar.tsx`) pokazuje listę tego, co powstało offline, i czeka na
-„Dopisz do bazy" albo „Odrzuć". Powód jest podwójny: dwie osoby mogły offline
-ruszyć to samo, a dopisywane wstecz odbicia to godziny obecności i wejścia
-z karnetów — ktoś ma je zobaczyć, zanim wejdą do rozliczeń. Nieudane pozycje
-zostają na liście z powodem odmowy; nigdy nie znikają po cichu.
+**Wysyłka rusza sama po powrocie łącza.** Pas nad treścią
+(`app/offline-bar.tsx`) mówi, że zapisy jadą do bazy, i gaśnie, gdy dojadą —
+nikt nic nie klika. Taka była decyzja klubu i ma oparcie w tym, jak wygląda
+sala: nikt nie ma tam rąk do potwierdzania paska, a odbicie czekające na czyjąś
+zgodę jest w praktyce odbiciem, o którym się zapomina.
+
+Zabezpieczeniem zostaje to, co **nie** jest automatyczne:
+
+- pozycja, której baza nie przyjęła, **nigdy nie znika po cichu** — zostaje na
+  ekranie z powodem odmowy i czeka na człowieka (`Spróbuj jeszcze raz` albo
+  `Odrzuć`),
+- automat **nie ponawia** odrzuconych. Odmowa zwykle nie jest chwilowa
+  (wygasła rezerwacja, brak uprawnień, zapis starszy niż doba), więc ponawianie
+  oznaczałoby ten sam odrzucany zapis przy każdym pingu. Rozstrzyga to
+  `autoSendable` (`lib/domain/offline-queue.ts`),
+- nieudany **strzał** (padło łącze w trakcie, wygasła sesja) nie oznacza pozycji
+  jako odrzuconych, więc automat wróci do nich sam — ale z rosnącym odstępem
+  (1,2 s → 5 s → 15 s → 60 s). Bez tego efekt ponawiałby wysyłkę co sekundę
+  w kółko; sprawdzone na żywym ekranie, to nie jest hipotetyczne,
+- wysyłka jest **jedna na przeglądarkę** (`wLocie` w module), choćby pas wisiał
+  w dwóch kartach naraz.
+
+Startu pilnuje potwierdzone `online`, czyli odpowiedź z `/api/zdrowie` — nie
+samo zdarzenie przeglądarki. Wifi klubu bywa „jest", ale nie przepuszcza ruchu,
+a wysyłka w taką dziurę tylko naliczyłaby odmowy.
 
 Każda pozycja przy dopisywaniu przechodzi **ponownie** przez strażnika
 i tę samą regułę co zapis na żywo (`app/offline-actions.ts`). Wspólne jądro
@@ -245,6 +264,119 @@ jest wazniejsza niz powiadomienie o niej. Wysylka siedzi w
 czerwony) - na pulpicie wlasciciela, na kiosku i w panelu trenera. Zielone
 "Trener odbity" przy cudzym odbiciu byloby klamstwem, ktorego wlasciciel nie ma
 jak wylapac: patrzy na kafelek, nie w baze.
+
+## Dane demonstracyjne
+
+Wlasciciel ma pokazac, co system potrafi, na pelnej bazie - a potem to usunac.
+Ekran **Ustawienia -> Dane demonstracyjne** (`/admin/ustawienia/dane-demo`,
+wylacznie rola `ADMIN`; superadmin to w tym systemie zwykly ADMIN, wiec jedna
+rola pokrywa oba konta).
+
+Cala trudnosc siedzi w slowie "usunac": ma zniknac dokladnie to, co powstalo,
+i nic wiecej. Kasowanie jednej kartoteki zabiera **kaskada dziesiec tabel**,
+wiec pomylka o jeden rekord to skasowana historia prawdziwego klubowicza.
+
+### Trzy rzeczy, na ktorych to stoi
+
+**Spis (`DemoRecord`).** Kazdy zalozony rekord jest zapisywany razem
+z kolejnoscia. Usuwanie idzie wylacznie po tym spisie, wstecz - nigdy "po
+ksztalcie" (po nazwisku, adresie, dacie). Klub ma prawdziwych Nowakow. Wstecz,
+bo klucze obce sa tu w wiekszosci RESTRICT (`Payment -> Member`,
+`Member -> Trainer`, `Trainer -> Location`) i kasowanie od rodzica by sie
+wywalilo. Lista dozwolonych modeli jest w `lib/domain/demo-data.ts`; model spoza
+niej nie ma jak zostac usuniety, wiec nie ma prawa powstac.
+
+**Odmowa zamiast szkody.** Przed skasowaniem czegokolwiek sprawdzamy, czy do
+danych demo nie doczepilo sie cos prawdziwego (`demoBlockers`). `Booking`,
+`Attendance` i `Rating` leca **kaskada z zajec** - gdyby realny klubowicz
+zapisal sie na pokazowe zajecia, usuniecie demo zabraloby jego obecnosc bez
+sladu. Wtedy nie kasujemy nic i mowimy, co stoi na drodze. To samo dotyczy
+prawdziwego trenera przypisanego do sali pokazowej: ukryta tabela M2M
+`_TrainerLocations` kasuje sie kaskada razem z sala, wiec straciłby przypisanie
+bez bledu i bez sladu.
+
+**Zamiatanie pochodnych.** Nocne joby potrafia dolozyc rekord o kliencie demo
+juz PO wgraniu (alert retencyjny, ankieta odejscia, zamkniecie kasy sali
+pokazowej). Spis ich nie zna, wiec po przejsciu spisu idzie jawne czyszczenie
+wszystkiego, co wisi na kartotece, zajeciach i koncie demo. Takie rekordy
+z definicji nie moga byc danymi klubu - dotycza osoby, ktora nie istnieje.
+
+### Dane demo sa SAMODZIELNE
+
+Wlasna sala `[DEMO] Sala pokazowa`, wlasny cennik, wlasni trenerzy, wlasna
+kartoteka. Nic nie dokleja sie do prawdziwych zajec ani trenerow - i to nie
+jest ostroznosc na wyrost:
+
+- `lib/services/payroll.ts` liczy do wyplaty **kazda** sesje prowadzona przez
+  trenera w miesiacu, bez filtra. Demo zajecia dopiete do Daniela podbilyby
+  kwote, wedlug ktorej klub placi ludziom.
+- `CashDay` sumuje wplaty gotowkowe per sala i dzien, a dnia raz zamknietego
+  **nie da sie w tym systemie otworzyc**. Dlatego wplaty demo nigdy nie ida
+  metoda `CASH`.
+
+### Co jest wylaczone poza demo
+
+- **publiczny harmonogram** (`/api/publiczny/harmonogram`) pomija sale demo -
+  inaczej `czaplaboxing.pl` zapraszalby obcych ludzi na trening, ktorego nie ma,
+  a `/zapis/[sessionId]` pozwolilby im sie zapisac,
+- **powiadomienia** (`notify`, `notifyUser`, `alertAdmins`) pomijaja konta demo -
+  push nigdzie nie dojdzie, e-mail wroci odbiciem, a SMS jest platny za sztuke,
+- **joby** `detect-inactive`, `churn-and-survey`, `renewal-reminders`,
+  `session-reminders`, `compute-scores` i `close-cash-day` filtruja `isDemo`.
+  W `compute-scores` to nie kosmetyka: `clubMatured` jest wspolnym mianownikiem
+  retencji dla **kazdego** trenera, a wynik przeklada sie na realna premie.
+
+Konta demo powstaja **bez hasla** i na domenie `demo.invalid` (RFC 2606,
+nigdy nie zostanie zarejestrowana), wiec nie sa droga wejscia do kartoteki
+klubu ani adresem, pod ktory cokolwiek wyjdzie.
+
+### Zakaz mieszania demo z pieniedzmi klubu
+
+Generator trzyma demo osobno, ale ekran **Pieniadze -> Wplaty** pozwala wybrac
+dowolne polaczenie: demonstracyjnego klienta, prawdziwy cennik, prawdziwa sale
+i gotowke. Kazde takie polaczenie zostawia trwaly slad po usunieciu demo, wiec
+`assertNoDemoMix` (`lib/services/pass.ts`) odmawia:
+
+| co ktos probuje | dlaczego odmowa |
+| --- | --- |
+| klient demo + cennik klubu | zostaje licznik sprzedazy planu i wplata w kasie klubu |
+| prawdziwy klient + cennik demo | po usunieciu demo karnet nie ma sie do czego odniesc |
+| klient demo + prawdziwa sala | wplata wchodzi do zamkniecia kasy, ktorego nie da sie otworzyc |
+| klient demo + gotowka | jw. - kasa sumuje gotowke per sala i dzien |
+
+Straznik siedzi w jadrze sprzedazy, a nie w akcji ekranu: `sellPass`
+i `recordPassPayment` sa wolane z dwoch miejsc (`/admin/wplaty` i `/trainer/kasa`).
+
+### Kiedy usunac cala opcje
+
+Dane demo sa pomyslane na okres PRZED oddaniem systemu klubowi: pokaz,
+zaznajomienie sie, a potem usuniecie calej opcji. Do usuniecia po starcie:
+
+- ekran `app/admin/ustawienia/dane-demo/` i pozycja w `NAV_GROUPS`
+  (`app/admin/layout.tsx`),
+- `lib/services/demo-data.ts`, `lib/services/demo-dataset.ts`,
+  `lib/domain/demo-data.ts` wraz z testami,
+- `prisma/proba-danych-demo.ts`.
+
+**Kolumn `isDemo` i tabeli `DemoRecord` nie ma potrzeby kasowac** - migracja
+kasujaca kolumny jest nieodwracalna, a puste kolumny z `default false` nic nie
+kosztuja. Filtry `isDemo: false` w jobach i w publicznym harmonogramie moga
+zostac: na bazie bez danych demo nie zmieniaja wyniku, a usuwanie ich to
+ryzyko bez zysku.
+
+**Przed usunieciem opcji trzeba usunac dane demo z bazy** - inaczej zostana
+w klubie na zawsze, bo zniknie jedyne narzedzie, ktore umie je skasowac.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-danych-demo.ts
+```
+
+Wgrywa, sprawdza wlasciwosci bezpieczenstwa, probuje usunac przy doczepionym
+prawdziwym zapisie (ma odmowic), usuwa i **porownuje stan klubu przed i po**.
+Tylko baza deweloperska - skrypt wgrywa i kasuje.
 
 ## Hasła kadry
 

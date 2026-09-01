@@ -56,6 +56,11 @@ export async function GET(request: Request) {
       kind: "GROUP",
       status: "SCHEDULED",
       startsAt: { gte: now, lt: until },
+      // Sala pokazowa nie istnieje, a ten adres czyta strona klubu bez
+      // logowania. Zajęcia demonstracyjne na czaplaboxing.pl to zaproszenie
+      // obcych ludzi na trening, którego nie ma - i zapis, który im się uda,
+      // bo /zapis/[sessionId] jest publiczny.
+      location: { isDemo: false },
     },
     orderBy: { startsAt: "asc" },
     include: {

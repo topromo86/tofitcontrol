@@ -11,6 +11,13 @@
 // Hasła NIE trafiają na ekran ani do repozytorium - lądują w pliku obok
 // projektu, wykluczonym z gita. Rozdaje się je osobiście, a plik kasuje.
 // Wypisanie ich w konsoli zostawiłoby je w historii terminala.
+//
+// W pliku jest GOTOWA wiadomość dla każdego trenera osobno - do skopiowania
+// i wysłania. Osobno, bo cała lista wysłana jedną wiadomością znaczyłaby, że
+// każdy zna hasła pozostałych.
+//
+// Obejmuje wyłącznie konta z rolą TRAINER. Konto właściciela (ADMIN) jest poza
+// tym świadomie - do niego służy prisma/wymus-zmiane-hasla.ts.
 
 import { existsSync, writeFileSync } from "node:fs";
 import { randomInt } from "node:crypto";
@@ -27,6 +34,9 @@ function arg(name: string): string | null {
 
 const envFile = arg("--env") ?? ".env";
 const wykonaj = process.argv.includes("--ustaw");
+// Adres, który trafia do wiadomości. Domyślnie produkcyjny, bo to jedyny,
+// pod który trener ma się logować; --adres nadpisuje przy testach.
+const adresPanelu = arg("--adres") ?? "https://panel.czaplaboxing.pl";
 
 if (!existsSync(envFile)) {
   console.error(`Nie znaleziono pliku z adresem bazy: ${envFile}`);
@@ -81,8 +91,11 @@ async function main() {
     "HASŁA INSTRUKTORÓW - Czapla Boxing",
     `Wygenerowane: ${new Date().toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" })}`,
     "",
-    "Rozdaj osobiście, potem skasuj ten plik.",
+    "NIE WYSYŁAJ CAŁEGO PLIKU NIKOMU. Każdy dostaje wyłącznie SWÓJ blok -",
+    "inaczej cała kadra pozna nawzajem swoje hasła.",
+    "Po rozdaniu skasuj ten plik.",
     "",
+    "".padEnd(64, "="),
   ];
 
   for (const t of trenerzy) {
@@ -93,10 +106,26 @@ async function main() {
       // Hasło podane głosem w szatni zna dwoje ludzi, więc nie jest hasłem.
       data: { passwordHash: await bcrypt.hash(haslo, 10), mustChangePassword: true },
     });
-    wiersze.push(`${t.name}`);
-    wiersze.push(`  login:  ${t.email}`);
-    wiersze.push(`  hasło:  ${haslo}`);
+
+    // Gotowa wiadomość do skopiowania, a nie sama para login/hasło. Powód
+    // praktyczny: to i tak trzeba było za każdym razem pisać ręcznie, a przy
+    // pisaniu ręcznym ginie zdanie o wymuszonej zmianie hasła - czyli jedyne,
+    // które tłumaczy, dlaczego system po zalogowaniu nie wpuszcza dalej.
     wiersze.push("");
+    wiersze.push(`### ${t.name}  (wyślij na: ${t.email})`);
+    wiersze.push("");
+    wiersze.push(`Cześć ${t.name.split(" ")[0]},`);
+    wiersze.push("");
+    wiersze.push(`panel klubu: ${adresPanelu}`);
+    wiersze.push(`login:       ${t.email}`);
+    wiersze.push(`hasło:       ${haslo}`);
+    wiersze.push("");
+    wiersze.push("To hasło jest tymczasowe - znam je ja i Ty, więc nie jest hasłem.");
+    wiersze.push("Po pierwszym zalogowaniu system poprosi Cię o ustawienie własnego");
+    wiersze.push("i dopóki tego nie zrobisz, nie wpuści Cię dalej. Starego nie da się");
+    wiersze.push("wpisać z powrotem.");
+    wiersze.push("");
+    wiersze.push("".padEnd(64, "="));
   }
 
   const nazwa = `hasla-instruktorow-${new Date().toISOString().slice(0, 10)}.txt`;

@@ -34,14 +34,18 @@ enum Role {
 }
 
 model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  passwordHash    String?
-  name            String
-  phone           String?
-  role            Role
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String?
+  name               String
+  phone              String?
+  role               Role
+  // Konto z danych demonstracyjnych. Nie da się na nie zalogować (brak hasła),
+  // a powiadomienia i joby je pomijają - inaczej klub wysyłałby e-maile i push-e
+  // do ludzi, którzy nie istnieją.
+  isDemo             Boolean   @default(false)
   // Dostęp do modułu leadów (CRM). ADMIN ma zawsze; trenerowi nadaje admin.
-  canAccessLeads  Boolean   @default(false)
+  canAccessLeads     Boolean   @default(false)
   // Osobisty token wejścia (QR). Wspólny dla klienta i trenera - odbicie
   // identyfikuje KONTO, więc "trener też się odbija" działa tym samym
   // mechanizmem. Generowany leniwie przy pierwszym wyświetleniu kodu. Bearer:
@@ -49,16 +53,16 @@ model User {
   // Wymuszenie zmiany hasła przy najbliższym logowaniu. Ustawiane wszędzie
   // tam, gdzie hasło nadaje ktoś inny niż właściciel konta (skrypt kadrowy,
   // reset przez klub) - hasło znane dwóm osobom przestaje być hasłem.
-  mustChangePassword Boolean @default(false)
+  mustChangePassword Boolean   @default(false)
   // Ostatnio wybrany motyw ("dark" / "light"). Trzymany przy KONCIE, a nie
   // tylko w przeglądarce: wybór ma jechać z człowiekiem na telefon, tablet
   // i drugi komputer. null = brak wyboru, czyli tak jak ustawiony system.
-  theme           String?
-  checkInToken    String?   @unique
-  emailVerifiedAt DateTime? @db.Timestamptz
-  lastLoginAt     DateTime? @db.Timestamptz
-  createdAt       DateTime  @default(now()) @db.Timestamptz
-  updatedAt       DateTime  @updatedAt @db.Timestamptz
+  theme              String?
+  checkInToken       String?   @unique
+  emailVerifiedAt    DateTime? @db.Timestamptz
+  lastLoginAt        DateTime? @db.Timestamptz
+  createdAt          DateTime  @default(now()) @db.Timestamptz
+  updatedAt          DateTime  @updatedAt @db.Timestamptz
 
   // pushSubscription to surowy obiekt PushSubscription z przeglądarki
   // (endpoint + klucze), zapisany po zgodzie użytkownika. To transport;
@@ -70,22 +74,22 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   guardianLinkRequests    GuardianLinkRequest[]    @relation("GuardianLinkRequester")
 
-  trainer              Trainer?       @relation("TrainerAccount")
-  memberAccount        Member?        @relation("MemberAccount")
-  guardianOfMembers    Member[]       @relation("MemberGuardian")
-  authoredNotes        Note[]         @relation("NoteAuthor")
-  recordedAttendances  Attendance[]   @relation("AttendanceRecordedBy")
-  soldPasses           Pass[]         @relation("PassSoldBy")
-  recordedPayments     Payment[]      @relation("PaymentRecordedBy")
-  closedCashDays       CashDay[]      @relation("CashDayClosedBy")
-  grantedConsents      Consent[]      @relation("ConsentGrantedBy")
-  activityLogs         ActivityLog[]  @relation("ActivityActor")
-  recordedMeasurements Measurement[]  @relation("MeasurementRecordedBy")
-  refundedEntries      Booking[]      @relation("BookingEntryRefundedBy")
-  assignedLeads        Lead[]         @relation("LeadAssignee")
-  leadNotes            LeadNote[]     @relation("LeadNoteAuthor")
-  leadActivities       LeadActivity[] @relation("LeadActivityActor")
-  floorCheckIns        FloorCheckIn[] @relation("FloorCheckInUser")
+  trainer               Trainer?       @relation("TrainerAccount")
+  memberAccount         Member?        @relation("MemberAccount")
+  guardianOfMembers     Member[]       @relation("MemberGuardian")
+  authoredNotes         Note[]         @relation("NoteAuthor")
+  recordedAttendances   Attendance[]   @relation("AttendanceRecordedBy")
+  soldPasses            Pass[]         @relation("PassSoldBy")
+  recordedPayments      Payment[]      @relation("PaymentRecordedBy")
+  closedCashDays        CashDay[]      @relation("CashDayClosedBy")
+  grantedConsents       Consent[]      @relation("ConsentGrantedBy")
+  activityLogs          ActivityLog[]  @relation("ActivityActor")
+  recordedMeasurements  Measurement[]  @relation("MeasurementRecordedBy")
+  refundedEntries       Booking[]      @relation("BookingEntryRefundedBy")
+  assignedLeads         Lead[]         @relation("LeadAssignee")
+  leadNotes             LeadNote[]     @relation("LeadNoteAuthor")
+  leadActivities        LeadActivity[] @relation("LeadActivityActor")
+  floorCheckIns         FloorCheckIn[] @relation("FloorCheckInUser")
   recordedFloorCheckIns FloorCheckIn[] @relation("FloorCheckInRecorder")
 
   @@index([role])
@@ -96,6 +100,12 @@ model Location {
   name     String // "Mikołów" | "Tychy"
   address  String
   timezone String @default("Europe/Warsaw")
+
+  // Sala pokazowa z danych demonstracyjnych. Kolumna istnieje po to, żeby dało
+  // się ją WYKLUCZYĆ tam, gdzie demo nie ma prawa się pokazać - przede
+  // wszystkim w publicznym harmonogramie na czaplaboxing.pl. Skasowanie danych
+  // demo usuwa też tę salę; patrz lib/services/demo-data.ts.
+  isDemo Boolean @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -243,6 +253,9 @@ model Member {
   churnedAt                  DateTime?      @db.Timestamptz
   sparringClearedAt          DateTime?      @db.Timestamptz
   sparringClearedByTrainerId String?
+  // Kartoteka z danych demonstracyjnych. Widać to na liście klubowiczów, żeby
+  // nikt nie wziął demonstracyjnego Kowalskiego za klienta klubu.
+  isDemo                     Boolean        @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -455,7 +468,7 @@ model AvailabilityWindow {
 }
 
 model ClassTemplate {
-  id          String  @id @default(cuid())
+  id          String    @id @default(cuid())
   locationId  String
   trainerId   String
   // Nazwa opcjonalna: puste = zajęcia nazywają się jak ich rodzaj (kategoria).
@@ -472,8 +485,8 @@ model ClassTemplate {
   startDate   DateTime? @db.Timestamptz
   minAge      Int?
   maxAge      Int?
-  isKids      Boolean @default(false)
-  active      Boolean @default(true)
+  isKids      Boolean   @default(false)
+  active      Boolean   @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -733,6 +746,12 @@ model Plan {
   id              String  @id @default(cuid())
   name            String
   priceGross      Int // grosze
+  // Rodzaj karnetu z danych demonstracyjnych. Kolumna istnieje po to, żeby
+  // sprzedaż mogła ODMÓWIĆ wymieszania: karnet demonstracyjnego klienta na
+  // cenniku klubu zostawiłby po sobie licznik sprzedaży i wpłatę w kasie
+  // klubu, a karnet prawdziwego klienta na cenniku demo zablokowałby
+  // usunięcie danych demonstracyjnych.
+  isDemo          Boolean @default(false)
   entriesPerMonth Int? // null = OPEN
   durationDays    Int     @default(30)
   forMinors       Boolean @default(false)
@@ -803,15 +822,15 @@ model Payment {
   // PO rabacie - kod trzymamy dla raportów i historii.
   promoCodeId       String?
 
-  member          Member    @relation(fields: [memberId], references: [id], onDelete: Restrict)
-  pass            Pass?     @relation(fields: [passId], references: [id], onDelete: SetNull)
-  location        Location  @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  recordedByUser  User      @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
-  correctsPayment Payment?  @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id], onDelete: SetNull)
-  corrections     Payment[] @relation("PaymentCorrection")
-  promoCode       PromoCode? @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
+  member          Member               @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  pass            Pass?                @relation(fields: [passId], references: [id], onDelete: SetNull)
+  location        Location             @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  recordedByUser  User                 @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: Restrict)
+  correctsPayment Payment?             @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id], onDelete: SetNull)
+  corrections     Payment[]            @relation("PaymentCorrection")
+  promoCode       PromoCode?           @relation(fields: [promoCodeId], references: [id], onDelete: SetNull)
   // Sprzedaż karty podarunkowej: ta płatność jest przychodem za wydaną kartę.
-  soldGiftCard    GiftCard?  @relation("GiftCardSalePayment")
+  soldGiftCard    GiftCard?            @relation("GiftCardSalePayment")
   // Realizacje kart podarunkowych rozliczone tą płatnością (dopłata do karnetu).
   giftRedemptions GiftCardRedemption[]
 
@@ -1056,6 +1075,10 @@ enum ActivityAction {
   // potwierdzonego zastępstwa. Push do właściciela bywa niedostarczony,
   // a to musi zostawić trwały ślad - patrz lib/services/class-qr.ts.
   TRAINER_CHECKIN_MISMATCH
+  // Wgranie i usunięcie danych demonstracyjnych. Obie operacje ruszają bazę
+  // klubu hurtowo, więc muszą zostawić ślad z nazwiskiem i godziną.
+  DEMO_DATA_LOADED
+  DEMO_DATA_REMOVED
 }
 
 model ActivityLog {
@@ -1146,6 +1169,46 @@ model NotificationLog {
 
   @@unique([userId, type, subjectId])
   @@index([sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Dane demonstracyjne
+// ---------------------------------------------------------------------------
+
+// Spis rekordów utworzonych przez wgranie danych demonstracyjnych.
+//
+// Po co osobna tabela zamiast kolumny `isDemo` na każdym modelu: usuwanie musi
+// być DOWODLIWIE dokładne. Ten spis mówi, co dokładnie powstało - co do
+// rekordu i w jakiej kolejności - więc kasowanie idzie po nim wstecz i nie ma
+// jak dotknąć niczego, czego samo nie założyło. Kolumna `isDemo` odpowiadałaby
+// na inne pytanie ("czy ten rekord jest demonstracyjny") i wymagałaby migracji
+// kilkunastu modeli, a i tak trzeba by ufać, że żaden nie został pominięty.
+//
+// Kolejność zapisu = kolejność tworzenia. Kasujemy od końca, bo klucze obce
+// w tym schemacie są w większości RESTRICT (Payment -> Member, Pass -> Member,
+// Member -> Trainer, Trainer -> Location) i kasowanie „od rodzica” by się
+// wywaliło.
+model DemoRecord {
+  id String @id @default(cuid())
+
+  // Partia wgrania. Pozwala pokazać "wgrano 27 sierpnia, 412 rekordów"
+  // i skasować dokładnie tę partię.
+  batchId String
+
+  // Nazwa modelu Prisma (np. "member"). Kasowanie tłumaczy ją na delegata
+  // przez JAWNĄ mapę - nazwa spoza mapy jest odmawiana, a nie wykonywana.
+  model String
+
+  // Klucz główny utworzonego rekordu.
+  recordId String
+
+  // Numer w kolejności tworzenia - kasujemy malejąco.
+  seq Int
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([model, recordId])
+  @@index([batchId, seq])
 }
 
 // ---------------------------------------------------------------------------
