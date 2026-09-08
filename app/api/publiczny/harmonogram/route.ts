@@ -108,7 +108,15 @@ export async function GET(request: Request) {
   // Lokalizacje oddajemy osobno, żeby strona klubu mogła zbudować filtr
   // "Mikołów / Tychy" nawet wtedy, gdy w danym oknie akurat nie ma zajęć
   // w jednej z sal.
+  //
+  // Ten sam filtr `isDemo` co przy zajęciach, i to nie jest ostrożność na
+  // wyrost: widget rysuje jeden przycisk na każdą nazwę z tej listy
+  // (`rysujFiltry` w public/harmonogram-widget.js), więc bez filtra na
+  // czaplaboxing.pl pojawia się publiczny przycisk "[DEMO] Sala pokazowa",
+  // pokazujący po kliknięciu "Brak zajęć". Zajęcia były odfiltrowane od
+  // początku - nazwa sali wyciekała osobną drogą.
   const locations = await prisma.location.findMany({
+    where: { isDemo: false },
     orderBy: { name: "asc" },
     select: { name: true },
   });

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { detectInactive } from "@/lib/jobs/detect-inactive";
+import { cronRequestAuthorized } from "@/lib/auth/cron";
 
 // Vercel Cron, codziennie ok. 06:00 czasu Warszawy (patrz vercel.json).
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!cronRequestAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

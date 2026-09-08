@@ -318,7 +318,11 @@ jest ostroznosc na wyrost:
 
 - **publiczny harmonogram** (`/api/publiczny/harmonogram`) pomija sale demo -
   inaczej `czaplaboxing.pl` zapraszalby obcych ludzi na trening, ktorego nie ma,
-  a `/zapis/[sessionId]` pozwolilby im sie zapisac,
+  a `/zapis/[sessionId]` pozwolilby im sie zapisac. Filtr musi byc w **obu**
+  zapytaniach tego endpointu: zajecia i osobna lista sal. Lista sal dlugo go nie
+  miala i nazwa `[DEMO] Sala pokazowa` wisiala publicznie na stronie klubu jako
+  przycisk filtra (widget rysuje jeden przycisk na nazwe), mimo ze same zajecia
+  byly odfiltrowane od poczatku,
 - **powiadomienia** (`notify`, `notifyUser`, `alertAdmins`) pomijaja konta demo -
   push nigdzie nie dojdzie, e-mail wroci odbiciem, a SMS jest platny za sztuke,
 - **joby** `detect-inactive`, `churn-and-survey`, `renewal-reminders`,
@@ -377,6 +381,82 @@ npx.cmd tsx prisma/proba-danych-demo.ts
 Wgrywa, sprawdza wlasciwosci bezpieczenstwa, probuje usunac przy doczepionym
 prawdziwym zapisie (ma odmowic), usuwa i **porownuje stan klubu przed i po**.
 Tylko baza deweloperska - skrypt wgrywa i kasuje.
+
+## Jedno wejscie za jeden trening
+
+Obecnosc zapisuje sie trzema drogami (kiosk, stacja wejscia, reka trenera),
+a kazda z nich zdejmuje wejscie z karnetu. Jadro siedzi w
+`lib/services/attendance.ts`.
+
+Regula jest jedna: **wejscie schodzi za OBECNOSC, nie za klikniecie.** Dlatego
+`markManualAttendance` uzywa `createMany` ze `skipDuplicates` i zdejmuje wejscie
+wylacznie wtedy, gdy `count === 1`, czyli gdy obecnosc naprawde powstala.
+Wczesniej byl tam `upsert` z pustym `update` i bezwarunkowe zdjecie wejscia pod
+spodem - drugie wywolanie nie zmienialo obecnosci i mimo to zabieralo kolejne
+wejscie.
+
+Powtorzenie nie jest tu wyjatkiem, tylko codziennoscia: pozycja wracajaca
+z kolejki po powrocie lacza, ekran trenera z lista sprzed odbicia na kiosku
+(Server Component nie odswiezy sie sam), dwa klikniecia na wolnym wifi.
+A skutek byl niewidoczny: w bazie zostawal JEDEN wpis obecnosci, wiec ani
+kartoteka, ani historia aktywnosci nie pokazywaly, ze cos poszlo dwa razy.
+Klubowicz placil dwa wejscia za jeden trening i nie bylo ekranu, na ktorym dalo
+by sie to cofnac.
+
+Rozstrzyga baza (unikat `sessionId, memberId`), a nie odczyt sprzed chwili -
+dwa rownolegle zapisy nie przesliznaja sie oba.
+
+Sprawdzenie:
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-obecnosci.ts
+```
+
+Zaklada karnet i rezerwacje, zaznacza te sama obecnosc dwa razy, sprawdza, ze
+zeszlo jedno wejscie, i sprzata po sobie. Tylko baza deweloperska.
+
+## Zadania nocne wpuszczaja tylko Vercela
+
+Autoryzacja crona siedzi w `cronRequestAuthorized` (`lib/auth/cron.ts`) i jest
+wolana z kazdego `app/api/cron/*/route.ts`.
+
+Osobny plik nie dla porzadku. Kazdy endpoint sprawdzal to sam:
+
+```ts
+if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) ...
+```
+
+Gdy zmienna nie jest ustawiona, `${undefined}` daje napis "undefined", wiec
+warunek przepuszcza doslowny naglowek `Bearer undefined` - a prawdziwe wywolanie
+z Vercela (z sekretem) dostaje 401.
+Odwrotnie niz mial dzialac: obcy wchodzi, wlasciciel nie, i to po cichu.
+**Brak sekretu = odmowa dla wszystkich.**
+
+Zadania nie sa niewinne: generuja grafik, zamykaja dzien kasowy, wysylaja
+przypomnienia do wszystkich klubowiczow i przeliczaja wyniki trenerow, od
+ktorych zalezy premia.
+
+## Gdy cos padnie
+
+Trzy ekrany, bo Next ma trzy rozne momenty awarii:
+
+- `app/not-found.tsx` - adres, ktorego nie ma. Bez tego pliku Next pokazuje
+  wlasny ekran po angielsku, a wola go tez siedem stron przez `notFound()`.
+- `app/error.tsx` - wyjatek w ekranie albo w akcji serwerowej, w tym
+  `ForbiddenError` ze straznika. Tresc jest ogolna celowo: na produkcji Next
+  nie przekazuje tu komunikatu bledu (zostaje sam `digest`), wiec nie da sie
+  rozroznic "nie masz dostepu" od "baza nie odpowiedziala". `digest`
+  wyswietlamy - bez niego "cos nie dziala" jest nie do odszukania w logach.
+- `app/global-error.tsx` - awaria w glownym layoucie, czyli zanim powstanie
+  cokolwiek wspolnego. Zastepuje cale `<html>`, wiec rysuje je sam, **bez klas
+  Tailwinda**: skoro layout sie nie zbudowal, nie zakladamy, ze arkusz stylow
+  dojechal. Ta sama zasada i te same barwy co ekran offline w `public/sw.js`.
+
+Do tego glowny layout tlumi blad zapytania o ustawienia klubu
+(`app/layout.tsx`). Layout opakowuje KAZDY ekran, lacznie z logowaniem, a bierze
+stamtad tylko nazwe zestawu czcionek - chwilowa niedostepnosc bazy nie ma prawa
+zamknac klubowi drzwi do wlasnego systemu.
 
 ## Hasła kadry
 

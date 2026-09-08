@@ -16,8 +16,17 @@
 // i wysłania. Osobno, bo cała lista wysłana jedną wiadomością znaczyłaby, że
 // każdy zna hasła pozostałych.
 //
-// Obejmuje wyłącznie konta z rolą TRAINER. Konto właściciela (ADMIN) jest poza
-// tym świadomie - do niego służy prisma/wymus-zmiane-hasla.ts.
+// Domyślnie obejmuje konta z rolą TRAINER. Konta właścicielskie (ADMIN) tylko
+// z flagą --takze-wlasciciele, żeby zwykłe uruchomienie nie wymieniało hasła
+// osobie, która akurat jest zalogowana i o tym nie wie.
+//
+// Ta flaga musi istnieć, bo inaczej konta ADMIN zostają z hasłem `test1234`
+// wpisanym w prisma/setup-club.ts i prisma/add-real-trainers.ts - czyli
+// w repozytorium. Nie zamyka tego prisma/wymus-zmiane-hasla.ts: tamten skrypt
+// TYLKO zapala flagę i sam o tym mówi ("sama flaga nie unieważnia starego
+// hasła"). A skutek jest gorszy niż samo znane hasło: kto zaloguje się jako
+// pierwszy, tego system poprosi o ustawienie NOWEGO hasła - czyli przejmie
+// konto właściciela na stałe, a Daniel zostanie za drzwiami.
 
 import { existsSync, writeFileSync } from "node:fs";
 import { randomInt } from "node:crypto";
@@ -34,6 +43,7 @@ function arg(name: string): string | null {
 
 const envFile = arg("--env") ?? ".env";
 const wykonaj = process.argv.includes("--ustaw");
+const takzeWlasciciele = process.argv.includes("--takze-wlasciciele");
 // Adres, który trafia do wiadomości. Domyślnie produkcyjny, bo to jedyny,
 // pod który trener ma się logować; --adres nadpisuje przy testach.
 const adresPanelu = arg("--adres") ?? "https://panel.czaplaboxing.pl";
@@ -62,23 +72,32 @@ function generatePassword(): string {
 async function main() {
   console.log(`Baza: ${connectionString.replace(/:\/\/[^@]*@/, "://***@")} (z ${envFile})\n`);
 
+  const role = takzeWlasciciele ? (["ADMIN", "TRAINER"] as const) : (["TRAINER"] as const);
   const trenerzy = await prisma.user.findMany({
-    where: { role: "TRAINER" },
-    select: { id: true, email: true, name: true, lastLoginAt: true },
-    orderBy: { name: "asc" },
+    where: { role: { in: [...role] } },
+    select: { id: true, email: true, name: true, role: true, lastLoginAt: true },
+    orderBy: [{ role: "asc" }, { name: "asc" }],
   });
 
   if (trenerzy.length === 0) {
-    console.log("Brak kont z rolą TRAINER.");
+    console.log(`Brak kont z rolą ${role.join(" ani ")}.`);
     return;
   }
 
-  console.log(`Konta instruktorów (${trenerzy.length}):`);
+  console.log(`Konta do wymiany hasła (${trenerzy.length}):`);
   for (const t of trenerzy) {
     const logowanie = t.lastLoginAt
       ? `ostatnie logowanie ${t.lastLoginAt.toISOString().slice(0, 10)}`
       : "nigdy się nie logował(a)";
-    console.log(`  ${t.email.padEnd(36)} ${t.name.padEnd(24)} ${logowanie}`);
+    console.log(`  ${t.role.padEnd(8)} ${t.email.padEnd(36)} ${t.name.padEnd(24)} ${logowanie}`);
+  }
+
+  if (!takzeWlasciciele) {
+    console.log(
+      "\nKonta ADMIN (właściciel, superadmin) NIE są tu ujęte. Jeśli powstały" +
+        "\nskryptem zakładającym klub, nadal mają hasło wpisane w repozytorium." +
+        "\nUruchom dodatkowo z --takze-wlasciciele.",
+    );
   }
 
   if (!wykonaj) {

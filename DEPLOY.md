@@ -47,14 +47,24 @@ wpisuje się je w panelu Vercel (krok 3).
 
 ## 3. Zmienne środowiskowe
 
-W Vercel: **Settings → Environment Variables**. Zaznacz wszystkie środowiska
-(Production, Preview, Development).
+W Vercel: **Settings → Environment Variables**.
+
+> **`DATABASE_URL` ustaw osobno dla każdego środowiska.** Produkcyjny adres
+> wyłącznie w **Production**; w **Preview** i **Development** wpisz adres bazy
+> deweloperskiej. Zaznaczenie wszystkich środowisk naraz oznacza, że każde
+> wdrożenie podglądowe — z gałęzi, z pull requesta, z cudzego forka — działa na
+> żywej kartotece klubu: zapisuje obecności, sprzedaje karnety i wysyła
+> powiadomienia do prawdziwych ludzi. Migracji podgląd nie wgra
+> (`scripts/deploy-migrations.ts` rusza tylko przy `VERCEL_ENV=production`),
+> ale dane zmieni.
+>
+> Pozostałe zmienne mogą być wspólne dla wszystkich środowisk.
 
 Wymagane:
 
 | Zmienna | Skąd wziąć |
 | --- | --- |
-| `DATABASE_URL` | connection string z kroku 0 |
+| `DATABASE_URL` | connection string z kroku 0 — **Production osobno**, patrz wyżej |
 | `AUTH_SECRET` | wygeneruj: `npx auth secret` albo `openssl rand -base64 32` |
 | `CRON_SECRET` | dowolny długi losowy ciąg — chroni endpointy `/api/cron/*` |
 
@@ -78,18 +88,37 @@ Z lokalnego komputera, wskazując na bazę produkcyjną:
 npx cross-env DATABASE_URL="<adres_bazy_produkcyjnej>" npx prisma migrate deploy
 ```
 
-Następnie konfiguracja klubu (lokalizacje, plany i zgody pochodzą z `db seed`,
-a kadra, superadmin, kategorie i grafik z `db:setup`):
+Następnie konfiguracja klubu — kadra, superadmin, kategorie i grafik:
 
 ```bash
-npx cross-env DATABASE_URL="<adres_bazy_produkcyjnej>" npx prisma db seed
 npx cross-env DATABASE_URL="<adres_bazy_produkcyjnej>" npm run db:setup
 ```
 
-> `db seed` tworzy też dane testowe (klienci, historia). Na produkcji usuń je
-> po zalogowaniu albo poproś o skrypt czyszczący.
+> **`prisma db seed` NIE uruchamiaj na produkcji.** Ten skrypt oprócz
+> lokalizacji, planów i zgód dokłada pełne dane demonstracyjne: kilkadziesiąt
+> zmyślonych kartotek z polskimi nazwiskami, ich historię obecności, karnety
+> i wpłaty. Nic tego nie oznacza jako fikcyjne i nie ma narzędzia, które by to
+> usunęło — wsiąkają w kartotekę klubu na stałe i przez lata psują statystyki,
+> retencję i wyniki trenerów. `db seed` służy wyłącznie bazie deweloperskiej
+> (tak samo mówi AGENTS.md). Lokalizacje, plany i zgody zakłada się na
+> produkcji ręcznie z panelu, a rodzaje karnetów skryptem
+> `prisma/reset-cennik.ts`.
+>
+> Do pokazania systemu klubowi służy **Ustawienia → Dane demonstracyjne**:
+> te dane są oznaczone, spisane co do rekordu i dają się usunąć jednym
+> kliknięciem.
 
-**Zmień hasła** kont — skrypty zakładają je z tymczasowym `test1234`.
+**Zmień hasła** kont — skrypty zakładają je z tymczasowym `test1234`:
+
+```bash
+npx tsx prisma/hasla-trenerow.ts --env .env.vercel --ustaw --takze-wlasciciele
+```
+
+Bez `--takze-wlasciciele` skrypt pomija konta ADMIN (właściciel i superadmin),
+a to właśnie one zostają wtedy z hasłem z repozytorium. Samo
+`prisma/wymus-zmiane-hasla.ts` tu nie wystarcza — zapala flagę, ale **nie
+wymienia hasła**, więc kto zaloguje się jako pierwszy, ten ustawi nowe i
+przejmie konto.
 
 ## 5. Deploy
 

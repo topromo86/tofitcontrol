@@ -3,6 +3,7 @@ import { Anton, Archivo, IBM_Plex_Mono, Inter, Oswald, Playfair_Display } from "
 import Script from "next/script";
 import "./globals.css";
 import { getClubSettings } from "@/lib/services/settings";
+import { DEFAULT_FONT_THEME } from "@/lib/domain/font-themes";
 import { RegisterServiceWorker } from "./register-service-worker";
 import { getAccountTheme } from "@/lib/services/theme";
 import { themeInitScript } from "./theme-init";
@@ -56,7 +57,16 @@ export default async function RootLayout({
 }>) {
   // Zestaw czcionek z ustawień klubu - deterministyczny (z bazy), więc SSR i
   // klient zgadzają się co do data-font, bez migotania.
-  const [{ fontTheme }, accountTheme] = await Promise.all([getClubSettings(), getAccountTheme()]);
+  //
+  // Błąd bazy tłumimy tu tak samo jak w getAccountTheme i z tego samego powodu:
+  // ten layout opakowuje KAŻDY ekran, łącznie z logowaniem. Gdyby chwilowa
+  // niedostępność bazy wywróciła to jedno zapytanie, klub nie zobaczyłby nawet
+  // ekranu logowania - a jedyne, co stąd bierzemy, to nazwa zestawu czcionek.
+  const [ustawienia, accountTheme] = await Promise.all([
+    getClubSettings().catch(() => null),
+    getAccountTheme(),
+  ]);
+  const fontTheme = ustawienia?.fontTheme ?? DEFAULT_FONT_THEME;
 
   return (
     <html

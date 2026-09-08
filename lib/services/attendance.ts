@@ -30,18 +30,46 @@ export async function markManualAttendance(input: {
   });
 
   await prisma.$transaction(async (tx) => {
-    await tx.attendance.upsert({
-      where: { sessionId_memberId: { sessionId: booking.sessionId, memberId: booking.memberId } },
-      create: {
-        sessionId: booking.sessionId,
-        memberId: booking.memberId,
-        checkedInAt: input.at,
-        method: "MANUAL",
-        recordedByUserId: input.byUserId,
-      },
-      update: {},
+    // Wejście z karnetu ma zejść RAZ na obecność, a nie raz na kliknięcie.
+    //
+    // Wcześniej był tu `upsert` z pustym `update` i BEZWARUNKOWE zdjęcie
+    // wejścia zaraz pod nim. Drugie wywołanie dla tej samej osoby nie
+    // zmieniało wtedy nic w obecności - i mimo to zabierało kolejne wejście.
+    // Klubowicz płacił dwa wejścia za jeden trening, a w bazie zostawał jeden
+    // wpis obecności, więc nie było po czym tego poznać: ani w kartotece, ani
+    // w historii aktywności. Dróg do powtórzenia jest kilka i wszystkie są
+    // codzienne: pozycja wracająca z kolejki po powrocie łącza, ekran trenera
+    // z listą sprzed odbicia na kiosku (Server Component nie odświeży się sam),
+    // dwa kliknięcia na wolnym wifi.
+    //
+    // `createMany` ze `skipDuplicates` zamiast `upsert`, bo rozstrzygnięcie
+    // ma należeć do bazy, a nie do odczytu sprzed chwili: unikat
+    // (sessionId, memberId) przepuszcza pierwszy zapis i odrzuca drugi, także
+    // wtedy, gdy oba lecą równolegle. `count` mówi wprost, czy obecność
+    // POWSTAŁA - i tylko wtedy schodzi wejście.
+    //
+    // Pozostałe dwie drogi zapisu obecności mają swoich strażników
+    // (`ALREADY_CHECKED_IN` w lib/services/class-qr.ts i warunek na statusie
+    // rezerwacji w selfCheckIn niżej). Ta jedna go nie miała.
+    const powstala = await tx.attendance.createMany({
+      data: [
+        {
+          sessionId: booking.sessionId,
+          memberId: booking.memberId,
+          checkedInAt: input.at,
+          method: "MANUAL",
+          recordedByUserId: input.byUserId,
+        },
+      ],
+      skipDuplicates: true,
     });
+
+    // Rezerwację dociągamy zawsze - obecność mogła powstać drugą drogą, a
+    // status ma odpowiadać temu, co wydarzyło się na sali.
     await tx.booking.update({ where: { id: input.bookingId }, data: { status: "ATTENDED" } });
+
+    if (powstala.count === 0) return;
+
     await decrementPassEntryIfLimited(tx, booking.memberId, booking.session.kind);
     await markJoinedIfNeeded(tx, booking.memberId, input.at);
   });
