@@ -2,11 +2,14 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth/guard";
 import { calculateAge } from "@/lib/domain/booking";
 import { daysSince } from "@/lib/domain/retention";
 import { LEAD_SOURCE_LABEL } from "@/lib/domain/lead-import";
 import { MEMBER_LEVELS, MEMBER_LEVEL_LABEL } from "@/lib/domain/member-level";
-import { formatDate, formatDayTime } from "@/lib/format";
+import { formatDate, formatDayTime, formatMoney } from "@/lib/format";
+import { formatPhone } from "@/lib/domain/phone";
+import { cancelPaymentAction } from "../../finanse/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,8 +52,18 @@ export default async function AdminMemberCardPage({
   searchParams,
 }: {
   params: Promise<{ memberId: string }>;
-  searchParams: Promise<{ konto?: string; "konto-blad"?: string }>;
+  searchParams: Promise<{
+    konto?: string;
+    "konto-blad"?: string;
+    info?: string;
+    blad?: string;
+  }>;
 }) {
+  // Strażnik na samej stronie, nie tylko w layoucie: layout nie przelicza się
+  // przy każdej nawigacji po stronie klienta, a na tej karcie leżą dane
+  // wrażliwe i historia wpłat. Akcje mają własnych strażników, ale sam WIDOK
+  // też musi być zamknięty.
+  await requireRole("ADMIN");
   const { memberId } = await params;
   const query = await searchParams;
 
@@ -59,6 +72,30 @@ export default async function AdminMemberCardPage({
       where: { id: memberId },
       include: {
         user: { select: { email: true } },
+        // Rodzic / opiekun prawny: dane kontaktowe i to, DO KTÓREGO konta
+        // dziecko jest podpięte. Na karcie dziecka nie było o tym ani słowa,
+        // więc telefon do rodzica trzeba było szukać po kartotece.
+        guardianUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            // Rodzic bywa też klubowiczem - wtedy da się przejść wprost do jego
+            // karty zamiast szukać po nazwisku.
+            memberAccount: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
+        // Odwrotna strona tego samego powiązania: gdy to jest konto rodzica,
+        // pokazujemy dzieci, którymi się opiekuje.
+        payments: {
+          orderBy: { recordedAt: "desc" },
+          include: {
+            pass: { select: { plan: { select: { name: true } } } },
+            location: { select: { name: true } },
+            corrections: { select: { amountGross: true } },
+          },
+        },
         ownerTrainer: { include: { user: true } },
         homeLocation: true,
         passes: { orderBy: { endsAt: "desc" }, include: { plan: true } },
@@ -89,6 +126,17 @@ export default async function AdminMemberCardPage({
   ]);
   if (!member) notFound();
 
+  // Dzieci podpięte pod TO konto - druga strona powiązania rodzic-dziecko.
+  // Osobne zapytanie, bo idzie przez User, a nie przez Member: opiekunem jest
+  // konto logowania, nie kartoteka (rodzic może nie mieć własnej kartoteki).
+  const dzieci = member.userId
+    ? await prisma.member.findMany({
+        where: { guardianUserId: member.userId },
+        select: { id: true, firstName: true, lastName: true, birthDate: true, status: true },
+        orderBy: [{ firstName: "asc" }],
+      })
+    : [];
+
   const now = new Date();
   const age = calculateAge(member.birthDate, now);
 
@@ -107,6 +155,16 @@ export default async function AdminMemberCardPage({
 
   return (
     <div className="flex flex-col gap-8">
+      {query.info ? (
+        <p className="border-jade/40 bg-jade/10 text-text rounded-md border p-3 text-sm">
+          {query.info}
+        </p>
+      ) : null}
+      {query.blad ? (
+        <p className="border-red/40 bg-red/10 text-red rounded-md border p-3 text-sm">
+          {query.blad}
+        </p>
+      ) : null}
       <section>
         <Link href="/admin" className="text-muted-brand hover:text-brand-red text-xs">
           ← Karnety
@@ -131,6 +189,75 @@ export default async function AdminMemberCardPage({
         </p>
         <p className="text-muted-brand mt-1 text-sm">{formatTenure(member.joinedAt, now)}</p>
       </section>
+
+      {/* Rodzic i dzieci. Na karcie dziecka nie było o rodzicu ani słowa, więc
+          numer do niego trzeba było szukać po całej kartotece - a przy dziecku
+          to jest pierwsza rzecz, której się szuka. */}
+      {member.guardianUser || dzieci.length > 0 ? (
+        <section className="border-line bg-surface flex flex-col gap-3 rounded-md border p-4">
+          {member.guardianUser ? (
+            <div>
+              <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+                Rodzic / opiekun prawny
+              </h2>
+              <p className="text-text mt-1 font-medium">{member.guardianUser.name}</p>
+              <p className="text-muted-brand mt-0.5 text-sm">
+                {/* To jest LOGIN rodzica - czyli odpowiedź na pytanie "do którego
+                    konta to dziecko jest podpięte". */}
+                Konto: <span className="text-text font-mono">{member.guardianUser.email}</span>
+                {member.guardianUser.phone ? (
+                  <>
+                    {" · "}
+                    <a
+                      href={`tel:${member.guardianUser.phone}`}
+                      className="text-brand-red underline"
+                    >
+                      {formatPhone(member.guardianUser.phone)}
+                    </a>
+                  </>
+                ) : (
+                  " · brak numeru"
+                )}
+              </p>
+              {member.guardianUser.memberAccount ? (
+                <p className="mt-1 text-sm">
+                  <Link
+                    href={`/admin/klienci/${member.guardianUser.memberAccount.id}`}
+                    className="text-brand-red underline"
+                  >
+                    Rodzic też trenuje - otwórz jego kartę
+                  </Link>
+                </p>
+              ) : (
+                <p className="text-muted-brand mt-1 text-sm">
+                  Rodzic nie ma własnej kartoteki - konto służy tylko do prowadzenia dziecka.
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          {dzieci.length > 0 ? (
+            <div>
+              <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+                Dzieci na tym koncie ({dzieci.length})
+              </h2>
+              <ul className="mt-1 flex flex-col gap-1">
+                {dzieci.map((d) => (
+                  <li key={d.id} className="text-sm">
+                    <Link href={`/admin/klienci/${d.id}`} className="text-brand-red underline">
+                      {d.firstName} {d.lastName}
+                    </Link>
+                    <span className="text-muted-brand">
+                      {" "}
+                      · {calculateAge(d.birthDate, now)} lat · {STATUS_LABEL[d.status]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section
         className={`rounded-md border p-4 ${
@@ -246,6 +373,79 @@ export default async function AdminMemberCardPage({
             <li className="text-muted-brand text-sm">
               Brak karnetów - jeszcze żaden nie sprzedany.
             </li>
+          ) : null}
+        </ul>
+      </section>
+
+      {/* Historia wpłat. Wcześniej pojedynczą wpłatę dało się zobaczyć wyłącznie
+          na płaskiej liście czterdziestu ostatnich transakcji CAŁEGO klubu, bez
+          wyszukiwarki - czyli przypadek "w piątek ktoś się pomylił u tego
+          klienta" był praktycznie nie do obsłużenia. Stąd anulowanie jest
+          dostępne również tutaj: tam, gdzie pomyłkę realnie się znajduje. */}
+      <section>
+        <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+          Historia wpłat ({member.payments.length})
+        </h2>
+        <ul className="mt-2 flex flex-col gap-2">
+          {member.payments.map((p) => {
+            const saldo = p.amountGross + p.corrections.reduce((s, k) => s + k.amountGross, 0);
+            const anulowana = p.correctsPaymentId === null && saldo === 0;
+            const korekta = p.correctsPaymentId !== null;
+            return (
+              <li key={p.id} className="border-line bg-surface rounded-md border p-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-text font-medium">
+                    {p.pass?.plan.name ?? "Wpłata"}
+                    {korekta ? (
+                      <span className="text-muted-brand font-mono text-xs"> · korekta</span>
+                    ) : null}
+                  </span>
+                  <span
+                    className={`font-mono text-sm ${p.amountGross < 0 ? "text-red" : "text-text"}`}
+                  >
+                    {formatMoney(p.amountGross)}
+                  </span>
+                </div>
+                <p className="text-muted-brand mt-0.5 font-mono text-xs">
+                  {formatDate(p.recordedAt)} · {p.method} · {p.location.name}
+                </p>
+                {p.note ? <p className="text-text mt-1 text-sm">{p.note}</p> : null}
+
+                {anulowana ? (
+                  <p className="border-amber/50 bg-amber/10 text-amber mt-2 w-fit rounded-md border px-2 py-1 font-mono text-[11px] tracking-widest uppercase">
+                    Anulowana - rozliczona do zera
+                  </p>
+                ) : null}
+
+                {!anulowana && !korekta ? (
+                  <form
+                    action={cancelPaymentAction}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <input type="hidden" name="returnTo" value={`/admin/klienci/${member.id}`} />
+                    <Input
+                      name="note"
+                      placeholder="Powód anulowania (min. 5 znaków)"
+                      required
+                      minLength={5}
+                      className="border-line bg-surface-2 w-64"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      className="border-red text-red"
+                    >
+                      Pomyłka - anuluj
+                    </Button>
+                  </form>
+                ) : null}
+              </li>
+            );
+          })}
+          {member.payments.length === 0 ? (
+            <li className="text-muted-brand text-sm">Brak wpłat.</li>
           ) : null}
         </ul>
       </section>

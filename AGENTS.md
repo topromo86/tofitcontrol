@@ -615,6 +615,38 @@ Dlatego przycisk jest uzyty tam, gdzie podwojne klikniecie kosztuje pieniadze
 `useFormStatus` musi siedziec w komponencie DZIECKU formularza, nie w tym samym,
 co `<form>` - stad osobny plik zamiast flagi w miejscu uzycia.
 
+## Karta klubowicza: rodzic i historia wplat
+
+Karta (`/admin/klienci/[memberId]`) pokazuje teraz dwie rzeczy, ktorych wczesniej
+nie bylo mimo tego, ze dane od poczatku byly w bazie.
+
+**Rodzic i powiazanie kont.** Na karcie dziecka nie bylo o rodzicu ANI SLOWA -
+jedyny "Opiekun" na ekranie to trener-opiekun, co dodatkowo mylilo. Numer do
+rodzica trzeba bylo szukac po calej kartotece. Teraz widac: imie i nazwisko,
+**adres logowania rodzica** (czyli odpowiedz na pytanie, do ktorego konta dziecko
+jest podpiete), telefon jako odsylacz `tel:` i przejscie do jego karty, jesli
+rodzic tez trenuje.
+
+Odwrotna strona jest na karcie rodzica: lista dzieci na tym koncie. Idzie
+osobnym zapytaniem, bo powiazanie prowadzi przez `User`, a nie przez `Member` -
+opiekunem jest konto logowania, nie kartoteka, i rodzic nie musi miec wlasnej
+kartoteki.
+
+**Historia wplat** z przyciskiem "Pomylka - anuluj". To nie jest dublowanie
+ekranu Finansow, tylko naprawa realnego braku: pojedyncza wplata byla widoczna
+WYLACZNIE na plaskiej liscie czterdziestu ostatnich transakcji calego klubu, bez
+wyszukiwarki. Przypadek "w piatek ktos sie pomylil u tego klienta" byl przez to
+nie do obsluzenia, mimo ze kod anulowania istnial. Anulowanie ma byc tam, gdzie
+pomylke realnie sie znajduje.
+
+Sama karta dostala tez `requireRole("ADMIN")`. Wczesniej polegala wylacznie na
+straznku w layoucie, a layout nie przelicza sie przy kazdej nawigacji po stronie
+klienta - na ekranie z danymi wrazliwymi i historia wplat to za malo.
+
+**Czego tu nadal nie ma:** nie da sie zmienic ani odpiac opiekuna dziecka.
+Zmiana powiazania to decyzja o innym ciezarze (dostep do danych dziecka), wiec
+czeka na osobna prosbe.
+
 ## Sprzedaz karnetu z kartoteki
 
 Lista klientow (`/admin`) ma przy nazwisku **"Dodaj karnet"**, a gdy karnet jest
