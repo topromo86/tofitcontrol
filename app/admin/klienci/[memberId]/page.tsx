@@ -9,7 +9,9 @@ import { LEAD_SOURCE_LABEL } from "@/lib/domain/lead-import";
 import { MEMBER_LEVELS, MEMBER_LEVEL_LABEL } from "@/lib/domain/member-level";
 import { formatDate, formatDayTime, formatMoney } from "@/lib/format";
 import { formatPhone } from "@/lib/domain/phone";
-import { cancelPaymentAction } from "../../finanse/actions";
+import { cancelPaymentAction, changePaymentDateAction } from "../../finanse/actions";
+import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
+import { addCalendarDays, todayInTimeZone } from "@/lib/domain/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -139,6 +141,8 @@ export default async function AdminMemberCardPage({
 
   const now = new Date();
   const age = calculateAge(member.birthDate, now);
+  const dzisIso = isoDay(todayInTimeZone(now));
+  const najwczesniej = isoDay(addCalendarDays(todayInTimeZone(now), -MAX_BACKDATE_DAYS));
 
   // Hasło świeżo założonego konta - jednorazowo z ciasteczka (nie z URL).
   let provisioned: { email: string; password: string; emailed: boolean } | null = null;
@@ -415,6 +419,31 @@ export default async function AdminMemberCardPage({
                   <p className="border-amber/50 bg-amber/10 text-amber mt-2 w-fit rounded-md border px-2 py-1 font-mono text-[11px] tracking-widest uppercase">
                     Anulowana - rozliczona do zera
                   </p>
+                ) : null}
+
+                {!anulowana && !korekta ? (
+                  <form
+                    action={changePaymentDateAction}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <input type="hidden" name="returnTo" value={`/admin/klienci/${member.id}`} />
+                    <span className="text-muted-brand font-mono text-[11px] tracking-widest uppercase">
+                      Data wpłaty
+                    </span>
+                    <input
+                      type="date"
+                      name="dataWplaty"
+                      defaultValue={isoDay(todayInTimeZone(p.recordedAt))}
+                      min={najwczesniej}
+                      max={dzisIso}
+                      aria-label="Nowa data wpłaty"
+                      className="border-line bg-surface-2 text-text h-8 rounded-md border px-2 text-xs"
+                    />
+                    <Button type="submit" size="sm" variant="ghost">
+                      Zmień datę
+                    </Button>
+                  </form>
                 ) : null}
 
                 {!anulowana && !korekta ? (

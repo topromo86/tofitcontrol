@@ -730,6 +730,24 @@ sasiedniego dnia kasowego ani przy przeliczaniu na UTC, ani przy zmianie czasu.
 dopuszczeniu daty wstecznej, zniknelaby jedyna informacja pozwalajaca odroznic
 poprawiona pomylke od gotowki dosypanej do dnia, ktory juz sie rozliczyl.
 
+### Poprawienie daty juz zapisanej wplaty
+
+Ekrany Finansow i karty klubowicza maja przy wplacie pole daty i **"Zmien date"**
+(tylko ADMIN). Realny przypadek: Daniel bierze pieniadze w piatek wieczorem,
+a wpisuje je w sobote rano - pole daty przy sprzedazy pokrywa to tylko wtedy,
+gdy pamietal o nim w chwili wpisywania.
+
+Zmiana daty przelicza **DWA dni kasowe**: ten, z ktorego wplata wychodzi, i ten,
+do ktorego wchodzi. Oba musza byc otwarte - inaczej odmowa z komunikatem
+mowiacym, ktory dzien stoi na drodze.
+
+**Wpisy korygujace jada razem z oryginalem.** Anulowanie dostaje date oryginalu,
+wiec gdyby korekta zostala na miejscu, oba dni kasowe pokazalyby nieprawde.
+Samej korekty nie da sie przeniesc osobno.
+
+`createdAt` zostaje nietkniete - to jedyny slad, kiedy wiersz naprawde powstal,
+i to on odroznia poprawiona pomylke od gotowki dosypanej wstecz.
+
 ### Dzien kasowy jest nietykalny po zamknieciu
 
 `closeCashDay` przelicza `expectedGross` **wylacznie dla dni z `closedAt: null`**.

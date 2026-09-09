@@ -23,7 +23,7 @@ delete process.env.SMTP_PASSWORD;
 
 import { prisma } from "@/lib/prisma";
 import { sellPass } from "@/lib/services/pass";
-import { cancelPayment } from "@/lib/services/payment-correction";
+import { cancelPayment, changePaymentDate } from "@/lib/services/payment-correction";
 import { closeCashDay, recalcCashDay } from "@/lib/jobs/close-cash-day";
 import { addCalendarDays, todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
 
@@ -71,9 +71,10 @@ async function main() {
   const teraz = new Date();
   const dzis = todayInTimeZone(teraz);
   const trzyDniTemu = addCalendarDays(dzis, -3);
+  const dwaDniTemu = addCalendarDays(dzis, -2);
   const zalozonePasses: string[] = [];
   const zalozonePayments: string[] = [];
-  const dotknieteDni = [dzis, trzyDniTemu];
+  const dotknieteDni = [dzis, trzyDniTemu, dwaDniTemu];
 
   const kasaPrzed = await kasaDnia(location.id, dzis);
 
@@ -204,6 +205,68 @@ async function main() {
       poJobie.expectedGross === przedJobem.expectedGross,
       `${przedJobem.expectedGross} -> ${poJobie.expectedGross}`,
     );
+
+    console.log("\n=== 6. Przeniesienie wplaty na inny dzien ===");
+    const sprzedaz3 = await prisma.$transaction((tx) =>
+      sellPass(tx, {
+        memberId: member.id,
+        planId: plan.id,
+        locationId: location.id,
+        method: "CASH",
+        actorUserId: admin.id,
+        now: teraz,
+      }),
+    );
+    zalozonePasses.push(sprzedaz3.id);
+    const wplata3 = await prisma.payment.findFirstOrThrow({
+      where: { passId: sprzedaz3.id },
+      orderBy: { createdAt: "desc" },
+    });
+    zalozonePayments.push(wplata3.id);
+    await recalcCashDay(prisma, location.id, dzis);
+
+    const dzisPrzed = (await kasaDnia(location.id, dzis)).expectedGross;
+    const celPrzed = (await kasaDnia(location.id, dwaDniTemu)).expectedGross;
+    const iso = `${dwaDniTemu.year}-${String(dwaDniTemu.month).padStart(2, "0")}-${String(dwaDniTemu.day).padStart(2, "0")}`;
+
+    const zmiana = await changePaymentDate({
+      paymentId: wplata3.id,
+      actorUserId: admin.id,
+      rawDate: iso,
+      now: new Date(),
+    });
+    sprawdz("zmiana daty przyjeta", zmiana.ok, zmiana.ok ? "" : zmiana.message);
+
+    const po = await prisma.payment.findUniqueOrThrow({ where: { id: wplata3.id } });
+    sprawdz(
+      "data wplaty przesunieta",
+      todayInTimeZone(po.recordedAt).day === dwaDniTemu.day,
+      po.recordedAt.toISOString().slice(0, 10),
+    );
+    sprawdz(
+      "data WPISANIA nietknieta - slad zostaje",
+      po.createdAt.getTime() === wplata3.createdAt.getTime(),
+    );
+    const dzisPo = (await kasaDnia(location.id, dzis)).expectedGross;
+    const celPo = (await kasaDnia(location.id, dwaDniTemu)).expectedGross;
+    sprawdz(
+      "kasa dnia zrodlowego zmniejszona",
+      dzisPo === dzisPrzed - wplata3.amountGross,
+      `${dzisPrzed} -> ${dzisPo}`,
+    );
+    sprawdz(
+      "kasa dnia docelowego zwiekszona",
+      celPo === celPrzed + wplata3.amountGross,
+      `${celPrzed} -> ${celPo}`,
+    );
+
+    const wPrzyszlosc = await changePaymentDate({
+      paymentId: wplata3.id,
+      actorUserId: admin.id,
+      rawDate: `${dzis.year}-${String(dzis.month).padStart(2, "0")}-${String(dzis.day + 1).padStart(2, "0")}`,
+      now: new Date(),
+    });
+    sprawdz("data z przyszlosci odrzucona", !wPrzyszlosc.ok);
   } finally {
     // Sprzątanie w kolejności odwrotnej: najpierw korekty, potem wpłaty, karnety.
     await prisma.payment.deleteMany({ where: { correctsPaymentId: { in: zalozonePayments } } });

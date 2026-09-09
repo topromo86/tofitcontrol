@@ -3,7 +3,9 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cancelPaymentAction, correctPaymentAction } from "./actions";
+import { cancelPaymentAction, changePaymentDateAction, correctPaymentAction } from "./actions";
+import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
+import { addCalendarDays } from "@/lib/domain/time";
 
 function monthLabel(year: number, month: number): string {
   return new Intl.DateTimeFormat("pl-PL", { month: "long", year: "numeric" }).format(
@@ -19,6 +21,9 @@ export default async function FinansePage({
   const { info, blad } = await searchParams;
   const now = new Date();
   const today = todayInTimeZone(now);
+  // Granice pola daty - te same, co przy wpisywaniu wpłaty.
+  const dzisIso = isoDay(today);
+  const najwczesniej = isoDay(addCalendarDays(today, -MAX_BACKDATE_DAYS));
   const monthStart = zonedTimeToUtc(today.year, today.month, 1, 0, 0);
   const nextMonth =
     today.month === 12
@@ -247,6 +252,31 @@ export default async function FinansePage({
                       className="border-red text-red"
                     >
                       Pomyłka - anuluj wpłatę
+                    </Button>
+                  </form>
+                ) : null}
+
+                {!anulowana && p.correctsPaymentId === null ? (
+                  <form
+                    action={changePaymentDateAction}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <input type="hidden" name="returnTo" value="/admin/finanse" />
+                    <span className="text-muted-brand font-mono text-[11px] tracking-widest uppercase">
+                      Data wpłaty
+                    </span>
+                    <input
+                      type="date"
+                      name="dataWplaty"
+                      defaultValue={isoDay(todayInTimeZone(p.recordedAt))}
+                      min={najwczesniej}
+                      max={dzisIso}
+                      aria-label="Nowa data wpłaty"
+                      className="border-line bg-surface-2 text-text h-8 rounded-md border px-2 text-xs"
+                    />
+                    <Button type="submit" size="sm" variant="ghost">
+                      Zmień datę
                     </Button>
                   </form>
                 ) : null}

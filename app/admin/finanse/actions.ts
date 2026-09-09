@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/guard";
 import { logActivity } from "@/lib/services/activity";
 import { formatMoney } from "@/lib/format";
 import { redirect } from "next/navigation";
-import { cancelPayment } from "@/lib/services/payment-correction";
+import { cancelPayment, changePaymentDate } from "@/lib/services/payment-correction";
 import { safeReturnPath } from "@/lib/domain/return-path";
 
 // Payment jest append-only (reguła 11 CLAUDE.md) - korekta to NOWY wpis
@@ -95,4 +95,36 @@ export async function cancelPaymentAction(formData: FormData) {
     ? `Wpłata anulowana. ${wynik.ostrzezenie}`
     : "Wpłata anulowana.";
   redirect(`${powrot}?info=${encodeURIComponent(komunikat)}`);
+}
+
+// Poprawienie daty wpłaty. Osobno od anulowania, bo to nie jest cofnięcie
+// pieniędzy, tylko przestawienie ich do właściwego dnia - a od dnia zależy,
+// w której kasie się liczą.
+export async function changePaymentDateAction(formData: FormData) {
+  const session = await requireRole("ADMIN");
+  const paymentId = String(formData.get("paymentId"));
+  const rawDate = String(formData.get("dataWplaty") ?? "");
+  const powrot = safeReturnPath(
+    formData.get("returnTo"),
+    ["/admin/finanse", "/admin/klienci"],
+    "/admin/finanse",
+  );
+
+  const wynik = await changePaymentDate({
+    paymentId,
+    actorUserId: session.user.id,
+    rawDate,
+    now: new Date(),
+  });
+
+  if (!wynik.ok) redirect(`${powrot}?blad=${encodeURIComponent(wynik.message)}`);
+
+  revalidatePath("/admin/finanse");
+  revalidatePath("/admin/kasa");
+  revalidatePath("/admin/wplaty");
+
+  const opis =
+    `Data wpłaty zmieniona na ${wynik.na.toISOString().slice(0, 10)}.` +
+    (wynik.korekt > 0 ? ` Korekty (${wynik.korekt}) przesunięte razem z nią.` : "");
+  redirect(`${powrot}?info=${encodeURIComponent(opis)}`);
 }

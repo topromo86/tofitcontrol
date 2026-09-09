@@ -5,7 +5,9 @@ import { logActivity } from "@/lib/services/activity";
 import { isCashDayClosed, recalcCashDay } from "@/lib/jobs/close-cash-day";
 import {
   CANCEL_MESSAGE,
+  PAYMENT_DATE_MESSAGE,
   planCancellation,
+  resolvePaymentDate,
   type CancelError,
 } from "@/lib/domain/payment-correction";
 import { todayInTimeZone } from "@/lib/domain/time";
@@ -169,4 +171,113 @@ export async function cancelPayment(input: {
   }
 
   return { ok: true, deltaGross: plan.deltaGross, ostrzezenie };
+}
+
+// Poprawienie DATY już zapisanej wpłaty.
+//
+// Realny przypadek z klubu: Daniel bierze pieniądze w piątek wieczorem, a do
+// systemu wpisuje je w sobotę rano. Pole daty przy sprzedaży to pokrywa, ale
+// dopiero wtedy, gdy pamięta o nim w chwili wpisywania - a jeśli nie pamiętał,
+// wpłata leży w złym dniu i nie ma jak tego ruszyć.
+//
+// Data wpłaty decyduje, do którego dnia kasowego liczy się gotówka, więc zmiana
+// musi przeliczyć DWA dni: ten, z którego wpłata wychodzi, i ten, do którego
+// wchodzi. Oba muszą być otwarte - dnia zamkniętego w tym systemie nie da się
+// otworzyć, a cicha zmiana kwoty w rozliczeniu, które właściciel już podpisał,
+// jest gorsza niż odmowa.
+//
+// `createdAt` zostaje nietknięte. To jedyny ślad, kiedy wiersz naprawdę powstał,
+// i to on odróżnia poprawioną pomyłkę od gotówki dosypanej wstecz.
+//
+// Wpisy korygujące jadą RAZEM z oryginałem: anulowanie dostaje datę oryginału
+// (patrz wyżej), więc gdyby zostały na miejscu, oba dni kasowe pokazałyby
+// nieprawdę.
+
+export type ChangeDateResult =
+  { ok: false; message: string } | { ok: true; z: Date; na: Date; korekt: number };
+
+export async function changePaymentDate(input: {
+  paymentId: string;
+  actorUserId: string;
+  rawDate: string;
+  now: Date;
+}): Promise<ChangeDateResult> {
+  const payment = await prisma.payment.findUniqueOrThrow({
+    where: { id: input.paymentId },
+    include: {
+      member: { select: { firstName: true, lastName: true } },
+      corrections: { select: { id: true } },
+    },
+  });
+
+  if (payment.correctsPaymentId) {
+    return {
+      ok: false,
+      message: "To jest wpis korygujący - datę zmienia się na oryginale, a korekta idzie za nim.",
+    };
+  }
+
+  const wybrana = resolvePaymentDate(input.rawDate, input.now);
+  if (!wybrana.ok) return { ok: false, message: PAYMENT_DATE_MESSAGE[wybrana.reason] };
+
+  const zDnia = todayInTimeZone(payment.recordedAt);
+  const naDzien = wybrana.date;
+  if (zDnia.year === naDzien.year && zDnia.month === naDzien.month && zDnia.day === naDzien.day) {
+    return { ok: false, message: "Ta wpłata już ma tę datę." };
+  }
+
+  if (payment.method === "CASH") {
+    if (await isCashDayClosed(prisma, payment.locationId, zDnia)) {
+      return {
+        ok: false,
+        message:
+          "Kasa za dzień, w którym ta wpłata leży teraz, jest już zamknięta - przeniesienie " +
+          "zmieniłoby rozliczenie, którego nie da się otworzyć.",
+      };
+    }
+    if (await isCashDayClosed(prisma, payment.locationId, naDzien)) {
+      return {
+        ok: false,
+        message:
+          "Kasa za wybrany dzień jest już zamknięta - wpłaty gotówkowej nie da się tam dopisać.",
+      };
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.payment.update({
+      where: { id: payment.id },
+      data: { recordedAt: wybrana.at },
+    });
+    // Korekty idą za oryginałem - inaczej kwoty rozjechałyby się na dwóch dniach.
+    if (payment.corrections.length > 0) {
+      await tx.payment.updateMany({
+        where: { correctsPaymentId: payment.id },
+        data: { recordedAt: wybrana.at },
+      });
+    }
+
+    if (payment.method === "CASH") {
+      await recalcCashDay(tx, payment.locationId, zDnia);
+      await recalcCashDay(tx, payment.locationId, naDzien);
+    }
+
+    await logActivity(tx, {
+      actorUserId: input.actorUserId,
+      action: "PAYMENT_CORRECTED",
+      memberId: payment.memberId,
+      summary:
+        `Zmieniono datę wpłaty ${formatMoney(payment.amountGross)} ` +
+        `(${payment.member.firstName} ${payment.member.lastName}): ` +
+        `${payment.recordedAt.toISOString().slice(0, 10)} -> ${wybrana.at.toISOString().slice(0, 10)}` +
+        (payment.corrections.length > 0 ? ` (z ${payment.corrections.length} korektami)` : ""),
+    });
+  });
+
+  return {
+    ok: true,
+    z: payment.recordedAt,
+    na: wybrana.at,
+    korekt: payment.corrections.length,
+  };
 }
