@@ -1,6 +1,8 @@
 import { classifyPassStatus } from "@/lib/domain/pass";
 import { SETTLEMENT_LABEL, settlePass, sumPayments } from "@/lib/domain/payment-status";
 import { formatDate, formatMoney } from "@/lib/format";
+import { addCalendarDays, todayInTimeZone } from "@/lib/domain/time";
+import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { recordPaymentAction, sellPassAction } from "./payment-actions";
@@ -51,6 +53,11 @@ export function PaymentsList({
   returnTo,
   q,
   now,
+  // Pole daty wpłaty widzi wyłącznie właściciel. Trener przy kasie zapisuje
+  // to, co dzieje się teraz - wsteczne datowanie gotówki z jego ekranu byłoby
+  // dziurą w mechanizmie, który ma jej pilnować. Serwer sprawdza to jeszcze raz
+  // (app/payment-actions.ts), bo ukrycie pola niczego nie broni.
+  mozeWybracDate = false,
 }: {
   members: PaymentsMember[];
   plans: PaymentsPlan[];
@@ -59,7 +66,11 @@ export function PaymentsList({
   returnTo: string;
   q: string;
   now: Date;
+  mozeWybracDate?: boolean;
 }) {
+  const dzis = todayInTimeZone(now);
+  const dzisIso = isoDay(dzis);
+  const najwczesniej = isoDay(addCalendarDays(dzis, -MAX_BACKDATE_DAYS));
   return (
     <ul className="flex flex-col gap-2">
       {members.map((m) => {
@@ -165,6 +176,18 @@ export function PaymentsList({
                               </option>
                             ))}
                           </select>
+                          {mozeWybracDate ? (
+                            <input
+                              type="date"
+                              name="dataWplaty"
+                              defaultValue={dzisIso}
+                              min={najwczesniej}
+                              max={dzisIso}
+                              aria-label="Data wpłaty"
+                              title="Data wpłaty - domyślnie dziś"
+                              className={SELECT}
+                            />
+                          ) : null}
                           <Button type="submit" size="sm" variant="outline">
                             Przyjmij dopłatę
                           </Button>
@@ -221,6 +244,18 @@ export function PaymentsList({
                     </option>
                   ))}
                 </select>
+                {mozeWybracDate ? (
+                  <input
+                    type="date"
+                    name="dataWplaty"
+                    defaultValue={dzisIso}
+                    min={najwczesniej}
+                    max={dzisIso}
+                    aria-label="Data wpłaty"
+                    title="Data wpłaty - domyślnie dziś"
+                    className={SELECT}
+                  />
+                ) : null}
                 <Button type="submit" size="sm" className="ml-auto">
                   Przyjmij wpłatę
                 </Button>

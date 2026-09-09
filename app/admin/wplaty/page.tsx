@@ -86,6 +86,7 @@ export default async function AdminWplatyPage({
         returnTo="/admin/wplaty"
         q={q ?? ""}
         now={new Date()}
+        mozeWybracDate
       />
     </div>
   );

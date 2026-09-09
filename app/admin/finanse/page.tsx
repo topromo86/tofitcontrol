@@ -3,7 +3,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { correctPaymentAction } from "./actions";
+import { cancelPaymentAction, correctPaymentAction } from "./actions";
 
 function monthLabel(year: number, month: number): string {
   return new Intl.DateTimeFormat("pl-PL", { month: "long", year: "numeric" }).format(
@@ -11,7 +11,12 @@ function monthLabel(year: number, month: number): string {
   );
 }
 
-export default async function FinansePage() {
+export default async function FinansePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ info?: string; blad?: string }>;
+}) {
+  const { info, blad } = await searchParams;
   const now = new Date();
   const today = todayInTimeZone(now);
   const monthStart = zonedTimeToUtc(today.year, today.month, 1, 0, 0);
@@ -36,7 +41,13 @@ export default async function FinansePage() {
       prisma.payment.findMany({
         orderBy: { recordedAt: "desc" },
         take: 40,
-        include: { member: true, correctsPayment: { include: { member: true } } },
+        include: {
+          member: true,
+          correctsPayment: { include: { member: true } },
+          // Potrzebne, żeby na ekranie było widać, że ta wpłata została już
+          // cofnięta - bez tego drugie anulowanie jest kwestią czasu.
+          corrections: { select: { amountGross: true } },
+        },
       }),
     ]);
 
@@ -161,61 +172,114 @@ export default async function FinansePage() {
         <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
           Płatności (ostatnie {recentPayments.length}) i korekty
         </h2>
+        {info ? (
+          <p className="border-jade/40 bg-jade/10 text-text mt-2 rounded-md border p-3 text-sm">
+            {info}
+          </p>
+        ) : null}
+        {blad ? (
+          <p className="border-red/40 bg-red/10 text-red mt-2 rounded-md border p-3 text-sm">
+            {blad}
+          </p>
+        ) : null}
         <p className="text-muted-brand mt-1 text-xs">
           Payment jest niezmienialny - korekta to nowy wpis z powodem, nigdy edycja ani usunięcie.
           Kwota korekty: dodatnia = dopłata, ujemna = zwrot.
         </p>
         <ul className="mt-2 flex flex-col gap-2">
-          {recentPayments.map((p) => (
-            <li key={p.id} className="border-line bg-surface rounded-md border p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-text font-medium">
-                  {p.member.firstName} {p.member.lastName}
-                </span>
-                <span
-                  className={`font-mono text-sm ${p.amountGross < 0 ? "text-red" : "text-text"}`}
-                >
-                  {formatMoney(p.amountGross)}
-                </span>
-              </div>
-              <p className="text-muted-brand font-mono text-xs">
-                {formatDate(p.recordedAt)} · {p.method}
-                {p.correctsPayment ? (
-                  <span>
-                    {" "}
-                    · korekta płatności z {formatDate(p.correctsPayment.recordedAt)} (
-                    {formatMoney(p.correctsPayment.amountGross)})
+          {recentPayments.map((p) => {
+            // Saldo wpłaty po wszystkich korektach. Zero znaczy "anulowana" -
+            // wtedy nie pokazujemy przycisku, bo druga korekta zrobiłaby
+            // z klienta dłużnika na kwotę, której nikt od niego nie brał.
+            const saldo = p.amountGross + p.corrections.reduce((s, k) => s + k.amountGross, 0);
+            const anulowana = p.correctsPaymentId === null && saldo === 0;
+            return (
+              <li key={p.id} className="border-line bg-surface rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-text font-medium">
+                    {p.member.firstName} {p.member.lastName}
                   </span>
-                ) : null}
-              </p>
-              {p.note ? <p className="text-text mt-1 text-sm">{p.note}</p> : null}
+                  <span
+                    className={`font-mono text-sm ${p.amountGross < 0 ? "text-red" : "text-text"}`}
+                  >
+                    {formatMoney(p.amountGross)}
+                  </span>
+                </div>
+                <p className="text-muted-brand font-mono text-xs">
+                  {formatDate(p.recordedAt)} · {p.method}
+                  {p.correctsPayment ? (
+                    <span>
+                      {" "}
+                      · korekta płatności z {formatDate(p.correctsPayment.recordedAt)} (
+                      {formatMoney(p.correctsPayment.amountGross)})
+                    </span>
+                  ) : null}
+                </p>
+                {p.note ? <p className="text-text mt-1 text-sm">{p.note}</p> : null}
 
-              <form
-                action={correctPaymentAction}
-                className="mt-2 flex flex-wrap items-center gap-2"
-              >
-                <input type="hidden" name="paymentId" value={p.id} />
-                <Input
-                  name="deltaZl"
-                  type="number"
-                  step="0.01"
-                  placeholder="Kwota korekty (zł, może być ujemna)"
-                  required
-                  className="border-line bg-surface-2 w-56"
-                />
-                <Input
-                  name="note"
-                  placeholder="Powód korekty (min. 5 znaków)"
-                  required
-                  minLength={5}
-                  className="border-line bg-surface-2 w-64"
-                />
-                <Button type="submit" size="sm" variant="outline">
-                  Koryguj
-                </Button>
-              </form>
-            </li>
-          ))}
+                {anulowana ? (
+                  <p className="border-amber/50 bg-amber/10 text-amber mt-2 rounded-md border px-2 py-1 font-mono text-[11px] tracking-widest uppercase">
+                    Anulowana - rozliczona do zera
+                  </p>
+                ) : null}
+
+                {/* "Pomyłka" to jedno kliknięcie i powód. Kwotę liczy system
+                  (całe pozostałe saldo), bo liczenie jej w głowie przy kasie
+                  jest dokładnie tym momentem, w którym powstaje druga pomyłka. */}
+                {!anulowana && p.correctsPaymentId === null ? (
+                  <form
+                    action={cancelPaymentAction}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <input type="hidden" name="returnTo" value="/admin/finanse" />
+                    <Input
+                      name="note"
+                      placeholder="Powód anulowania (min. 5 znaków)"
+                      required
+                      minLength={5}
+                      className="border-line bg-surface-2 w-72"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      className="border-red text-red"
+                    >
+                      Pomyłka - anuluj wpłatę
+                    </Button>
+                  </form>
+                ) : null}
+
+                {!anulowana ? (
+                  <form
+                    action={correctPaymentAction}
+                    className="mt-2 flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="paymentId" value={p.id} />
+                    <Input
+                      name="deltaZl"
+                      type="number"
+                      step="0.01"
+                      placeholder="Kwota korekty (zł, może być ujemna)"
+                      required
+                      className="border-line bg-surface-2 w-56"
+                    />
+                    <Input
+                      name="note"
+                      placeholder="Powód korekty (min. 5 znaków)"
+                      required
+                      minLength={5}
+                      className="border-line bg-surface-2 w-64"
+                    />
+                    <Button type="submit" size="sm" variant="outline">
+                      Koryguj
+                    </Button>
+                  </form>
+                ) : null}
+              </li>
+            );
+          })}
           {recentPayments.length === 0 ? (
             <li className="text-muted-brand text-sm">Brak płatności.</li>
           ) : null}

@@ -578,6 +578,89 @@ wgrywa go drugi raz (ma nie zalozyc nic) i odzyskuje imie ze zepsutego wpisu.
 Plik testowy jest w skrypcie - prawdziwego eksportu nie ma w repozytorium
 i byc nie moze, bo to dane osobowe 185 osob.
 
+## Pomylka w kasie
+
+Wplata wpisana pomylkowo ma dac sie cofnac, a wplata z piatku wpisana
+w poniedzialek ma trafic do piatkowej kasy. Obie rzeczy dotykaja tego samego
+miejsca, wiec sa opisane razem.
+
+### "Usuniecie" to wpis odwracajacy, nie DELETE
+
+Ekran Finansow ma przycisk **"Pomylka - anuluj wplate"** (tylko ADMIN, wymagany
+powod). Dla klubu to jest usuniecie: kwota schodzi do zera i znika z kasy.
+W bazie powstaje wpis odwracajacy ze wskazaniem oryginalu.
+
+To nie jest ostroznosc na wyrost. Na `Payment` wskazuja **cztery** referencje -
+karnet, korekta, sprzedana karta podarunkowa i jej realizacja - i wszystkie sa
+`onDelete: SetNull`. Twarde `DELETE` **nie odbiloby sie o baze**: przeszloby
+i zostawilo karte podarunkowa bez zapisu przychodu oraz osierocona realizacje.
+
+Rozstrzyga `planCancellation` (`lib/domain/payment-correction.ts`), a wykonuje
+`cancelPayment` (`lib/services/payment-correction.ts`). Cztery reguly, kazda
+z powodu:
+
+| regula | dlaczego |
+| --- | --- |
+| kwota liczona od SALDA, nie od kwoty pierwotnej | wplata 200 zl z wczesniejszym zwrotem 50 zl ma sie wyzerowac wpisem -150, nie -200 |
+| nie da sie anulowac dwa razy | drugie klikniecie zrobiloby z klienta dluznika na kwote, ktorej nikt od niego nie bral |
+| nie da sie anulowac wpisu korygujacego | korekta korekty to spirala, ktorej klub nie rozplata |
+| wpis odwracajacy dostaje date ORYGINALU | inaczej gotowka z wtorku znikalaby z wtorkowej kasy dopiero w czwartek i oba dni klamalyby |
+
+Anulowanie przywraca tez to, co powstalo obok pieniedzy: **saldo karty
+podarunkowej** (wpisem przeciwnym, nie skasowaniem realizacji - historia karty
+zostaje) i **licznik uzyc kodu rabatowego**. Karta wydana za anulowana wplate
+jest gaszona, bo nie zostala oplacona.
+
+**Karnet zostaje** - to osobna decyzja czlowieka, wiec akcja tylko OSTRZEGA, ze
+karnet jest teraz niedoplacony. Bez tego ostrzezenia kasa trenera podsunelaby
+pobranie tych samych pieniedzy drugi raz.
+
+### Data wplaty
+
+Ekran **Pieniadze -> Wplaty** ma pole daty z podstawiona dzisiejsza data.
+Widzi je **wylacznie ADMIN** - rola sprawdzana jest w akcji serwerowej
+(`app/payment-actions.ts`), nie samym ukryciem pola. Kasa trenera zapisuje to,
+co dzieje sie teraz; wsteczne datowanie gotowki z jego ekranu byloby dziura
+w mechanizmie, ktory ma jej pilnowac.
+
+Data idzie do bazy jako **osobny parametr `recordedAt`**, nigdy jako `params.now`.
+To rozroznienie jest tu krytyczne: od `now` wisi waznosc karnetu, kontrola
+terminow kodow rabatowych i `joinedAt` (a z niego terminy wdrozenia i premia
+trenera). Podstawienie wybranej daty jako `now` cofneloby karnet, a nie wplate.
+
+Granice pilnuje `resolvePaymentDate`: bez przyszlosci, najwyzej
+`MAX_BACKDATE_DAYS` (7) wstecz. Dzien wsteczny zapisujemy na **poludnie czasu
+klubu** - lezy bezpiecznie w srodku doby, wiec wplata nie przeskoczy do
+sasiedniego dnia kasowego ani przy przeliczaniu na UTC, ani przy zmianie czasu.
+
+`Payment` dostal obok `recordedAt` **niezmienne `createdAt`**. Bez tego, po
+dopuszczeniu daty wstecznej, zniknelaby jedyna informacja pozwalajaca odroznic
+poprawiona pomylke od gotowki dosypanej do dnia, ktory juz sie rozliczyl.
+
+### Dzien kasowy jest nietykalny po zamknieciu
+
+`closeCashDay` przelicza `expectedGross` **wylacznie dla dni z `closedAt: null`**.
+Wczesniej `update` szedl bezwarunkowo, wiec kazda korekta zrobiona wieczorem
+podmieniala kwote w rozliczeniu, ktorego w tym systemie NIE DA SIE otworzyc -
+wlasciciel widzial nazajutrz czerwone manko, ktorego wieczorem nie bylo.
+
+Wplata z data wsteczna nie moze czekac na nocny job: on liczy tylko dzien,
+w ktorym sie odpala, i nigdy nie wraca do poprzednich. Dlatego akcja wola
+`recalcCashDay` dla wskazanego dnia **w tej samej transakcji**, a gdy tamten
+dzien jest juz zamkniety - **cofa cala sprzedaz** z komunikatem. Lepiej
+odmowic, niz zapisac pieniadze, ktorych rozliczenie nigdy nie zobaczy.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-korekty-wplat.ts
+```
+
+Sprzedaje karnet za gotowke, anuluje, probuje anulowac drugi raz, wystawia
+wplate z data sprzed trzech dni, zamyka tamten dzien i sprawdza, ze ani
+anulowanie, ani nocny job juz go nie ruszaja. Tylko baza deweloperska.
+
 ## Hasła kadry
 
 Konta trenerów powstały ze wspólnym hasłem tymczasowym wpisanym w skrypcie

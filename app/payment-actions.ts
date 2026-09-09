@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireOwnsMember } from "@/lib/auth/guard";
 import { sellPass, recordPassPayment, SaleError } from "@/lib/services/pass";
 import type { PaymentMethod } from "@/app/generated/prisma/client";
+import { PAYMENT_DATE_MESSAGE, resolvePaymentDate } from "@/lib/domain/payment-correction";
+import { recalcCashDay } from "@/lib/jobs/close-cash-day";
 
 // Przyjmowanie wpłat działa w dwóch miejscach: u trenera na sali i w panelu
 // właściciela. Akcje są wspólne, bo reguły rozliczenia są te same - różni je
@@ -48,6 +50,38 @@ function makeBack(returnTo: string, q: string): Back {
   };
 }
 
+// Data wpłaty z formularza. Pole widzi i wypełnia WYŁĄCZNIE właściciel - trener
+// przy kasie zapisuje to, co dzieje się teraz, i wsteczne datowanie gotówki
+// z jego ekranu byłoby dziurą w tym samym mechanizmie, który ma jej pilnować.
+// Dlatego rola sprawdzana jest tutaj, na serwerze, a nie tylko ukryciem pola.
+function dataWplaty(formData: FormData, rola: string, back: Back) {
+  const raw = rola === "ADMIN" ? String(formData.get("dataWplaty") ?? "") : "";
+  const wynik = resolvePaymentDate(raw, new Date());
+  if (!wynik.ok) back({ error: PAYMENT_DATE_MESSAGE[wynik.reason] });
+  return wynik;
+}
+
+// Wpłata gotówkowa z datą wsteczną musi wejść do rozliczenia TAMTEGO dnia -
+// nocny job liczy tylko dzień, w którym się odpala, i nigdy nie wraca do
+// poprzednich. Gdy kasa tamtego dnia jest już zamknięta, cofamy całą
+// transakcję: lepiej odmówić, niż zapisać pieniądze, których rozliczenie nigdy
+// nie zobaczy.
+async function domknijKase(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  metoda: PaymentMethod,
+  locationId: string,
+  data: { today: boolean; date: { year: number; month: number; day: number } },
+) {
+  if (metoda !== "CASH" || data.today) return;
+  const udalo = await recalcCashDay(tx, locationId, data.date);
+  if (!udalo) {
+    throw new SaleError(
+      "Kasa tej sali za wybrany dzień jest już zamknięta - wpłaty gotówkowej nie da się " +
+        "do niej dopisać. Wybierz dzisiejszą datę albo rozlicz to osobno.",
+    );
+  }
+}
+
 // Sprzedaż karnetu wraz z wpłatą. Puste pole kwoty = klient płaci całość;
 // kwota niższa tworzy karnet z zaległością widoczną na liście.
 export async function sellPassAction(formData: FormData) {
@@ -71,9 +105,11 @@ export async function sellPassAction(formData: FormData) {
   const back: Back = makeBack(returnTo, q);
   if (rawAmount.trim() && paidGross === null) back({ error: "Podaj poprawną kwotę wpłaty." });
 
+  const data = dataWplaty(formData, session.user.role, back);
+
   try {
-    await prisma.$transaction((tx) =>
-      sellPass(tx, {
+    await prisma.$transaction(async (tx) => {
+      await sellPass(tx, {
         memberId,
         planId,
         locationId,
@@ -83,8 +119,10 @@ export async function sellPassAction(formData: FormData) {
         promoCode,
         giftCardCode,
         paidGross: paidGross ?? undefined,
-      }),
-    );
+        recordedAt: data.today ? undefined : data.at,
+      });
+      await domknijKase(tx, method as PaymentMethod, locationId, data);
+    });
   } catch (e) {
     // Zły kod/karta/kwota: pokazujemy komunikat zamiast generycznego 500.
     // Inne błędy (np. brak planu) lecą dalej.
@@ -114,17 +152,21 @@ export async function recordPaymentAction(formData: FormData) {
   const back: Back = makeBack(returnTo, q);
   if (amountGross === null) back({ error: "Podaj kwotę wpłaty." });
 
+  const data = dataWplaty(formData, session.user.role, back);
+
   try {
-    await prisma.$transaction((tx) =>
-      recordPassPayment(tx, {
+    await prisma.$transaction(async (tx) => {
+      await recordPassPayment(tx, {
         passId,
         amountGross,
         method: method as PaymentMethod,
         locationId,
         actorUserId: session.user.id,
         now: new Date(),
-      }),
-    );
+        recordedAt: data.today ? undefined : data.at,
+      });
+      await domknijKase(tx, method as PaymentMethod, locationId, data);
+    });
   } catch (e) {
     if (e instanceof SaleError) back({ error: e.message });
     throw e;

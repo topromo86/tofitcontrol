@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth/guard";
 import { logActivity } from "@/lib/services/activity";
 import { formatMoney } from "@/lib/format";
+import { redirect } from "next/navigation";
+import { cancelPayment } from "@/lib/services/payment-correction";
+import { safeReturnPath } from "@/lib/domain/return-path";
 
 // Payment jest append-only (reguła 11 CLAUDE.md) - korekta to NOWY wpis
 // wskazujący przez correctsPaymentId na oryginał, nigdy edycja ani usunięcie.
@@ -54,4 +57,42 @@ export async function correctPaymentAction(formData: FormData) {
   });
 
   revalidatePath("/admin/finanse");
+}
+
+// "Pomyłka - anuluj wpłatę". Dla klubu to jest usunięcie; w bazie wpis
+// odwracający, bo na wpłatę wiszą karnety, karty podarunkowe i zamknięcia kasy.
+// Cała reguła (ile odwrócić, czego nie wolno) siedzi w
+// lib/services/payment-correction.ts, żeby dała się sprawdzić bez ekranu.
+export async function cancelPaymentAction(formData: FormData) {
+  const session = await requireRole("ADMIN");
+  const paymentId = String(formData.get("paymentId"));
+  const note = String(formData.get("note") ?? "");
+  // Adres powrotu idzie z formularza, więc musi przejść przez strażnika -
+  // inaczej byłby to otwarty przekierowywacz.
+  const powrot = safeReturnPath(
+    formData.get("returnTo"),
+    ["/admin/finanse", "/admin/klienci"],
+    "/admin/finanse",
+  );
+
+  const wynik = await cancelPayment({
+    paymentId,
+    actorUserId: session.user.id,
+    note,
+    now: new Date(),
+  });
+
+  if (!wynik.ok) {
+    redirect(`${powrot}?blad=${encodeURIComponent(wynik.message)}`);
+  }
+
+  revalidatePath("/admin/finanse");
+  revalidatePath("/admin/kasa");
+  revalidatePath("/admin/wplaty");
+  revalidatePath("/trainer/kasa");
+
+  const komunikat = wynik.ostrzezenie
+    ? `Wpłata anulowana. ${wynik.ostrzezenie}`
+    : "Wpłata anulowana.";
+  redirect(`${powrot}?info=${encodeURIComponent(komunikat)}`);
 }

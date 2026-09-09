@@ -815,7 +815,14 @@ model Payment {
   method            PaymentMethod
   locationId        String
   recordedByUserId  String
+  // Dzień, do którego wpłata się liczy. Da się ustawić wstecz (pomyłka wpisana
+  // dzień później), więc NIE jest śladem tego, kiedy ktoś ją wpisał.
   recordedAt        DateTime      @default(now()) @db.Timestamptz
+  // Kiedy wiersz naprawdę powstał. Niezmienne i niewidoczne w formularzach -
+  // bez tego, po dopuszczeniu daty wstecznej, znika jedyna informacja, po
+  // której da się odróżnić poprawioną pomyłkę od gotówki dosypanej do dnia,
+  // który już się rozliczył.
+  createdAt         DateTime      @default(now()) @db.Timestamptz
   correctsPaymentId String?
   note              String?       @db.Text
   // Kod rabatowy użyty przy tej sprzedaży (jeśli był). amountGross to już cena

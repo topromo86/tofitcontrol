@@ -126,6 +126,9 @@ export async function sellPass(
     // Ile klient wpłaca TERAZ. Pominięte = płaci całość. Mniejsza kwota tworzy
     // karnet z zaległością, którą widać w kasie i na karcie klienta.
     paidGross?: number;
+    // Dzień, do którego wpłata ma się policzyć w kasie. Brak = dziś. NIE rusza
+    // ważności karnetu ani terminów kodów - te idą za `now`.
+    recordedAt?: Date;
   },
 ) {
   const [plan, currentActivePass, member, location] = await Promise.all([
@@ -219,6 +222,11 @@ export async function sellPass(
             method: params.method,
             locationId: params.locationId,
             recordedByUserId: params.actorUserId,
+            // Dzień, do którego wpłata się liczy. Osobno od `params.now`, bo od
+            // `now` wisi ważność karnetu, kontrola terminów kodów rabatowych
+            // i data dołączenia klienta - podstawienie tam wybranej daty
+            // cofnęłoby karnet, a nie wpłatę.
+            ...(params.recordedAt ? { recordedAt: params.recordedAt } : {}),
             promoCodeId: promo?.id ?? null,
           },
         })
@@ -276,6 +284,8 @@ export async function recordPassPayment(
     locationId: string;
     actorUserId: string;
     now: Date;
+    // Dzień, do którego wpłata ma się policzyć. Brak = dziś.
+    recordedAt?: Date;
   },
 ) {
   const invalid = validatePaymentAmount(params.amountGross);
@@ -309,6 +319,8 @@ export async function recordPassPayment(
       method: params.method,
       locationId: params.locationId,
       recordedByUserId: params.actorUserId,
+      // Patrz komentarz przy sellPass: data wpłaty to NIE jest `now`.
+      ...(params.recordedAt ? { recordedAt: params.recordedAt } : {}),
     },
   });
 
