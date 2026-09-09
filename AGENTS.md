@@ -810,6 +810,37 @@ Sprzedaje karnet za gotowke, anuluje, probuje anulowac drugi raz, wystawia
 wplate z data sprzed trzech dni, zamyka tamten dzien i sprawdza, ze ani
 anulowanie, ani nocny job juz go nie ruszaja. Tylko baza deweloperska.
 
+## Dane kontaktowe konta
+
+**E-mail i telefon sa WYMAGANE przy rejestracji.** Numer siedzi na `User.phone`
+(kartoteka `Member` nie ma wlasnego pola telefonu - kontaktem jest konto).
+
+Powod jest z sali, nie z formularza: klub dzwoni czesciej, niz pisze. Przy
+odwolanych zajeciach, zaleglej wplacie i dziecku, po ktore nikt nie przyszedl,
+e-mail przeczyta sie wieczorem, a telefon odbiera sie od razu.
+
+Numer sprawdza `parsePhone` (`lib/domain/phone.ts`) - to samo miejsce, ktore
+sprawdza numery lead-ow i kadry. Druga, wlasna walidacja w rejestracji
+skonczylaby sie dwiema roznymi regulami dla tego samego pola. Do bazy trafia
+jedna postac (`+48...`), wiec ten sam czlowiek nie wyglada w kartotece jak dwie
+osoby.
+
+Regula obowiazuje w OBU drogach zakladania konta: formularza `/rejestracja`
+i dokonczenia profilu po logowaniu Google (Google daje e-mail, ale nie daje
+numeru).
+
+**Profil DZIECKA nie wymaga numeru** - dziecko nie ma wlasnego konta,
+a kontaktem jest rodzic. Dlatego walidacja jest rozdzielona:
+`validateProfile` (konto uzytkownika, z numerem) i `validateChildProfile`
+(profil dziecka, bez numeru).
+
+Pusty numer daje wlasny komunikat ("Podaj numer telefonu."), a nie ogolne
+"uzupelnij wszystkie pola" - czlowiek ma wiedziec, ktore pole go zatrzymalo.
+
+Konta zalozone WCZESNIEJ numeru nie maja. Ekran **Konto** ma sekcje "Dane
+kontaktowe" z polem numeru i ostrzezeniem, gdy go brakuje - inaczej wymog
+dotyczylby wylacznie nowych kont, a stare zostalyby bez telefonu na zawsze.
+
 ## Rodzic i dziecko
 
 **Konto dla osoby niepelnoletniej zaklada RODZIC ze swojego konta.** Dziecko nie

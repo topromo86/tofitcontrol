@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/guard";
+import { requireRole, requireSession } from "@/lib/auth/guard";
 import { prisma } from "@/lib/prisma";
 import { isValidEmail, normalizeEmail } from "@/lib/domain/registration";
+import { PHONE_ERROR_MESSAGE, parsePhone } from "@/lib/domain/phone";
 
 // Rodzic PROSI o wgląd w grafik dziecka - powiązanie aktywuje dopiero admin
 // (dostęp do danych dziecka jest wrażliwy). Tu tylko zakładamy prośbę i, jeśli
@@ -61,4 +62,27 @@ export async function requestGuardianLinkAction(formData: FormData) {
 
   revalidatePath("/app/konto");
   back("WYSLANO");
+}
+
+// Zapis numeru telefonu na koncie.
+//
+// Numer jest wymagany przy rejestracji, ale konta zalozone WCZESNIEJ go nie
+// maja - a klub dzwoni czesciej, niz pisze. To jest miejsce, w ktorym da sie
+// go uzupelnic bez chodzenia do klubu.
+export async function savePhoneAction(formData: FormData) {
+  const session = await requireSession();
+  const raw = String(formData.get("phone") ?? "");
+
+  const numer = parsePhone(raw);
+  if ("error" in numer) {
+    redirect(`/app/konto?tel=${encodeURIComponent(PHONE_ERROR_MESSAGE[numer.error])}`);
+  }
+
+  await prisma.user.update({
+    where: { id: session.user.id },
+    data: { phone: numer.phone },
+  });
+
+  revalidatePath("/app/konto");
+  redirect("/app/konto?tel=ok");
 }

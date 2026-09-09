@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { completeProfileAction, type ProfileState } from "./actions";
+import { PHONE_HINT } from "@/lib/domain/phone";
 
 const initialState: ProfileState = {};
 
@@ -63,6 +64,22 @@ export function CompleteProfileForm({
           </Label>
           <Input id="birthDate" name="birthDate" type="date" required className={fieldClass} />
         </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="phone" className={labelClass}>
+            Telefon
+          </Label>
+          <Input
+            id="phone"
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            required
+            placeholder="500 600 700"
+            className={fieldClass}
+          />
+          <p className="text-muted-brand text-xs">{PHONE_HINT}</p>
+        </div>
+
         <div className="flex flex-col gap-2">
           <Label htmlFor="sex" className={labelClass}>
             Płeć

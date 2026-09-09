@@ -1,6 +1,7 @@
 // Czyste funkcje rejestracji i haseł - bez dostępu do bazy, w pełni testowalne.
 
 import { calculateAge } from "@/lib/domain/booking";
+import { parsePhone, type PhoneError } from "@/lib/domain/phone";
 
 export const PASSWORD_MIN_LENGTH = 8;
 
@@ -68,12 +69,17 @@ export type RegistrationError =
   | "INVALID_EMAIL"
   | "INVALID_BIRTHDATE"
   | "PASSWORD_MISMATCH"
-  | { password: PasswordError };
+  | { password: PasswordError }
+  | { phone: PhoneError };
 
 export type RegistrationInput = {
   firstName: string;
   lastName: string;
   email: string;
+  // Numer WYMAGANY. Klub dzwoni częściej, niż pisze: przy odwołanych zajęciach,
+  // zaległej wpłacie i dziecku, po które nikt nie przyszedł, e-mail przeczyta
+  // się wieczorem, a telefon odbiera się od razu.
+  phone: string;
   password: string;
   confirmPassword: string;
   birthDate: Date;
@@ -98,6 +104,12 @@ export function validateRegistration(
     return "MISSING_FIELDS";
   }
   if (input.sex !== "MALE" && input.sex !== "FEMALE") return "MISSING_FIELDS";
+
+  // Numer sprawdza `parsePhone` z lib/domain/phone.ts - jedyne miejsce
+  // w systemie, które wie, co jest numerem. Druga, własna walidacja tutaj
+  // skończyłaby się dwiema różnymi regułami dla tego samego pola.
+  const numer = parsePhone(input.phone);
+  if ("error" in numer) return { phone: numer.error };
   if (!isValidEmail(input.email)) return "INVALID_EMAIL";
 
   // Osoba niepełnoletnia MOŻE zarejestrować się sama - konto trafia wtedy do
@@ -117,11 +129,14 @@ export function validateRegistration(
   return null;
 }
 
-export type ProfileError = "MISSING_FIELDS" | "INVALID_BIRTHDATE";
+export type ProfileError = "MISSING_FIELDS" | "INVALID_BIRTHDATE" | { phone: PhoneError };
 
 export type ProfileInput = {
   firstName: string;
   lastName: string;
+  // Google daje e-mail, ale nie daje numeru - a numer jest wymagany tak samo
+  // jak przy formularzu.
+  phone: string;
   birthDate: Date;
   sex: string;
   homeLocationId: string;
@@ -133,6 +148,22 @@ export type ProfileInput = {
 // Nieletni też może dokończyć profil; konto trafia do zatwierdzenia (tak samo
 // jak przy rejestracji formularzem, patrz requiresApproval).
 export function validateProfile(input: ProfileInput, now: Date): ProfileError | null {
+  const wspolne = validateChildProfile(input, now);
+  if (wspolne) return wspolne;
+
+  const numer = parsePhone(input.phone);
+  if ("error" in numer) return { phone: numer.error };
+
+  return null;
+}
+
+// Profil DZIECKA zakładany przez rodzica: te same pola, ale bez telefonu.
+// Dziecko nie ma własnego konta ani numeru - kontaktem jest jego rodzic,
+// a jego numer wisi przy koncie rodzica.
+export function validateChildProfile(
+  input: Omit<ProfileInput, "phone">,
+  now: Date,
+): ProfileError | null {
   if (
     !input.firstName ||
     !input.lastName ||

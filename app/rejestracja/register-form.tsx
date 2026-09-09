@@ -11,6 +11,7 @@ import { calculateAge } from "@/lib/domain/booking";
 import { PASSWORD_MIN_LENGTH, SELF_REGISTER_MIN_AGE } from "@/lib/domain/registration";
 import { GoogleButton } from "../google-button";
 import { registerAction, type RegisterState } from "./actions";
+import { PHONE_HINT } from "@/lib/domain/phone";
 
 const initialState: RegisterState = {};
 
@@ -180,6 +181,22 @@ export function RegisterForm({
               required
               className={fieldClass}
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="phone" className={labelClass}>
+              Telefon
+            </Label>
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              required
+              placeholder="500 600 700"
+              className={fieldClass}
+            />
+            <p className="text-muted-brand text-xs">{PHONE_HINT}</p>
           </div>
 
           <div className="flex flex-col gap-2">

@@ -15,6 +15,7 @@ import {
   MINOR_SELF_REGISTER_MESSAGE,
   selfRegistrationAllowed,
 } from "@/lib/domain/registration";
+import { PHONE_ERROR_MESSAGE, parsePhone } from "@/lib/domain/phone";
 import { hashPassword } from "@/lib/services/password-reset";
 import { startEmailVerification } from "@/lib/services/email-verification";
 import { logActivity } from "@/lib/services/activity";
@@ -30,7 +31,10 @@ async function baseUrl(): Promise<string> {
 
 export type RegisterState = { error?: string };
 
-const ERROR_MESSAGE: Record<Exclude<RegistrationError, { password: unknown }>, string> = {
+const ERROR_MESSAGE: Record<
+  Exclude<RegistrationError, { password: unknown } | { phone: unknown }>,
+  string
+> = {
   MISSING_FIELDS: "Uzupełnij wszystkie pola.",
   INVALID_EMAIL: "Podaj poprawny adres e-mail.",
   INVALID_BIRTHDATE: "Podaj poprawną datę urodzenia.",
@@ -42,6 +46,7 @@ export async function registerAction(
   formData: FormData,
 ): Promise<RegisterState> {
   const email = normalizeEmail(String(formData.get("email") ?? ""));
+  const phoneRaw = String(formData.get("phone") ?? "");
   const password = String(formData.get("password") ?? "");
   const confirmPassword = String(formData.get("confirmPassword") ?? "");
   const firstName = String(formData.get("firstName") ?? "").trim();
@@ -59,6 +64,7 @@ export async function registerAction(
       firstName,
       lastName,
       email,
+      phone: phoneRaw,
       password,
       confirmPassword,
       birthDate,
@@ -70,10 +76,20 @@ export async function registerAction(
   );
   if (validation) {
     if (typeof validation === "object") {
-      return { error: PASSWORD_ERROR_MESSAGE[validation.password] };
+      return {
+        error:
+          "password" in validation
+            ? PASSWORD_ERROR_MESSAGE[validation.password]
+            : PHONE_ERROR_MESSAGE[validation.phone],
+      };
     }
     return { error: ERROR_MESSAGE[validation] };
   }
+
+  // Numer zapisujemy w jednej postaci (+48...), tej samej co wszędzie indziej -
+  // inaczej ten sam człowiek miałby w bazie dwa różne zapisy swojego numeru.
+  const numer = parsePhone(phoneRaw);
+  const phone = "phone" in numer ? numer.phone : null;
 
   // Trener i lokalizacja z formularza muszą być prawdziwe i aktywne - inaczej
   // ktoś podrobiłby ownerTrainerId i osierocił kartotekę u nieistniejącego
@@ -114,6 +130,7 @@ export async function registerAction(
         email,
         name: `${firstName} ${lastName}`,
         role: "MEMBER",
+        phone,
         passwordHash,
       },
     });

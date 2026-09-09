@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDate } from "@/lib/format";
-import { requestGuardianLinkAction } from "./actions";
+import { requestGuardianLinkAction, savePhoneAction } from "./actions";
+import { PHONE_HINT, formatPhone } from "@/lib/domain/phone";
+import { SubmitButton } from "../../submit-button";
 
 // Komunikaty po wysłaniu prośby (kod w ?req=). Trzymamy je tu, blisko widoku.
 const REQ_MESSAGE: Record<string, { text: string; tone: "ok" | "err" }> = {
@@ -26,11 +28,16 @@ const STATUS_LABEL: Record<string, string> = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ req?: string }>;
+  searchParams: Promise<{ req?: string; tel?: string }>;
 }) {
   const session = await requireRole("MEMBER", "GUARDIAN");
-  const { req } = await searchParams;
+  const { req, tel } = await searchParams;
   const message = req ? REQ_MESSAGE[req] : null;
+
+  const konto = await prisma.user.findUniqueOrThrow({
+    where: { id: session.user.id },
+    select: { phone: true, email: true },
+  });
 
   const [children, requests] = await Promise.all([
     prisma.member.findMany({
@@ -49,6 +56,49 @@ export default async function AccountPage({
   return (
     <div className="flex flex-col gap-8">
       <h1 className="font-display text-brand-red text-2xl tracking-wide">Konto</h1>
+
+      {/* Dane kontaktowe. Numer jest wymagany przy rejestracji, ale konta
+          założone wcześniej go nie mają - a klub dzwoni częściej, niż pisze:
+          przy odwołanych zajęciach i dziecku, po które nikt nie przyszedł,
+          e-mail przeczyta się wieczorem, a telefon odbiera się od razu. */}
+      <section className="border-line bg-surface flex flex-col gap-3 rounded-md border p-4">
+        <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+          Dane kontaktowe
+        </h2>
+        <p className="text-muted-brand text-sm">
+          E-mail: <span className="text-text font-mono">{konto.email}</span>
+        </p>
+        {tel === "ok" ? (
+          <p className="border-jade/40 bg-jade/10 text-text rounded-md border p-3 text-sm">
+            Numer zapisany.
+          </p>
+        ) : tel ? (
+          <p className="border-red/40 bg-red/10 text-red rounded-md border p-3 text-sm">{tel}</p>
+        ) : null}
+        {!konto.phone ? (
+          <p className="border-amber/50 bg-amber/10 text-amber rounded-md border p-3 text-sm">
+            Twoje konto nie ma numeru telefonu. Klub kontaktuje się telefonicznie, gdy zajęcia
+            wypadają albo coś dzieje się na sali - uzupełnij go.
+          </p>
+        ) : null}
+        <form action={savePhoneAction} className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="phone">Telefon</Label>
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              required
+              defaultValue={konto.phone ? formatPhone(konto.phone) : ""}
+              placeholder="500 600 700"
+              className="border-line bg-surface-2 w-48"
+            />
+          </div>
+          <SubmitButton pendingLabel="Zapisuję...">Zapisz numer</SubmitButton>
+        </form>
+        <p className="text-muted-brand text-xs">{PHONE_HINT}</p>
+      </section>
 
       <section className="flex flex-col gap-3">
         <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">

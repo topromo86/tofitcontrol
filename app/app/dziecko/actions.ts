@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth/guard";
 import { calculateAge } from "@/lib/domain/booking";
-import { selfRegistrationAllowed, validateProfile } from "@/lib/domain/registration";
+import { selfRegistrationAllowed, validateChildProfile } from "@/lib/domain/registration";
 import { logActivity } from "@/lib/services/activity";
 
 // Założenie profilu dziecka z konta rodzica.
@@ -37,7 +37,9 @@ export async function createChildAction(
   const now = new Date();
   const birthDate = new Date(birthDateStr);
 
-  const blad = validateProfile(
+  // Bez telefonu: kontaktem dziecka jest rodzic, a jego numer wisi przy koncie
+  // rodzica. Dziecko nie ma wlasnego konta.
+  const blad = validateChildProfile(
     { firstName, lastName, birthDate, sex, homeLocationId, ownerTrainerId },
     now,
   );

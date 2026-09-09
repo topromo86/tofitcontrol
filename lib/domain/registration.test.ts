@@ -8,6 +8,7 @@ import {
   SELF_REGISTER_MIN_AGE,
   validatePassword,
   validateProfile,
+  validateChildProfile,
   validateRegistration,
   type ProfileInput,
   type RegistrationInput,
@@ -24,6 +25,7 @@ function baseInput(over: Partial<RegistrationInput> = {}): RegistrationInput {
     firstName: "Jan",
     lastName: "Kowalski",
     email: "jan@example.com",
+    phone: "500600700",
     password: "haslo1234",
     confirmPassword: "haslo1234",
     birthDate: adultBirthDate(),
@@ -134,6 +136,7 @@ describe("validateProfile", () => {
     return {
       firstName: "Jan",
       lastName: "Kowalski",
+      phone: "500600700",
       birthDate: adultBirthDate(),
       sex: "MALE",
       homeLocationId: "loc1",
@@ -186,5 +189,57 @@ describe("selfRegistrationAllowed", () => {
   it("komunikat mówi, co zrobić, a nie tylko odmawia", () => {
     expect(MINOR_SELF_REGISTER_MESSAGE).toContain("Załóż najpierw konto na siebie");
     expect(MINOR_SELF_REGISTER_MESSAGE).toContain("Moje dziecko");
+  });
+});
+
+describe("telefon wymagany przy rejestracji", () => {
+  const TERAZ = new Date("2026-09-09T12:00:00Z");
+
+  it("brak numeru mówi wprost o numerze, a nie ogólne 'uzupełnij pola'", () => {
+    expect(validateRegistration(baseInput({ phone: "" }), TERAZ)).toEqual({ phone: "EMPTY" });
+  });
+
+  it("śmieciowy numer ma własny komunikat, nie ogólne 'uzupełnij pola'", () => {
+    const wynik = validateRegistration(baseInput({ phone: "123" }), TERAZ);
+    expect(wynik).toEqual({ phone: "POLISH_WRONG_LENGTH" });
+  });
+
+  it("dziewięć cyfr wystarczy - tak numer podaje Polak z pamięci", () => {
+    expect(validateRegistration(baseInput({ phone: "500 600 700" }), TERAZ)).toBeNull();
+  });
+
+  it("numer zagraniczny z kierunkowym przechodzi", () => {
+    expect(validateRegistration(baseInput({ phone: "+380671234567" }), TERAZ)).toBeNull();
+  });
+
+  it("ta sama reguła obowiązuje przy dokończeniu profilu po Google", () => {
+    const bezNumeru = validateProfile(
+      {
+        firstName: "Jan",
+        lastName: "Kowalski",
+        phone: "",
+        birthDate: new Date("2000-01-01"),
+        sex: "MALE",
+        homeLocationId: "loc1",
+        ownerTrainerId: "tr1",
+      },
+      TERAZ,
+    );
+    expect(bezNumeru).toEqual({ phone: "EMPTY" });
+  });
+
+  it("profil DZIECKA nie wymaga numeru - kontaktem jest rodzic", () => {
+    const dziecko = validateChildProfile(
+      {
+        firstName: "Zosia",
+        lastName: "Kowalska",
+        birthDate: new Date("2014-05-10"),
+        sex: "FEMALE",
+        homeLocationId: "loc1",
+        ownerTrainerId: "tr1",
+      },
+      TERAZ,
+    );
+    expect(dziecko).toBeNull();
   });
 });
