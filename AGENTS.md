@@ -507,6 +507,77 @@ Do tego glowny layout tlumi blad zapytania o ustawienia klubu
 stamtad tylko nazwe zestawu czcionek - chwilowa niedostepnosc bazy nie ma prawa
 zamknac klubowi drzwi do wlasnego systemu.
 
+## Leady z Meta
+
+Plik z Ads Managera wgrywa sie na `/leady`. Parser (`lib/domain/lead-import.ts`)
+musi znosic to, co Meta realnie eksportuje - a to nie jest czysty CSV:
+
+**Naglowek bywa inny, niz sie zaklada.** Plik klubu ma kolumne `Imie Nazwisko`
+(bez spojnika "i"), a alias brzmial `imie i nazwisko`. Kolumna nie pasowala,
+wiec w miejsce nazwiska wchodzil numer telefonu: 185 osob wjezdzalo do klubu
+z imieniem `p:+48571277686`. Dlatego naglowki porownujemy **bez ogonkow
+i bez wielkosci liter**, a aliasy sa w wersji ASCII.
+
+**Numer przychodzi w pieciu postaciach naraz** - w jednym pliku byly wszystkie:
+
+| co w pliku | co to znaczy |
+| --- | --- |
+| `p:+48571277686` | `p:` to marker typu pola z Meta, nie czesc numeru |
+| `p:605687770` | jw., do tego numer krajowy bez kierunkowego |
+| `48661535704` | kierunkowy BEZ plusa - najczestsza postac w eksporcie |
+| `783925065` | dziewiec cyfr, numer polski |
+| `31613737346` | numer zagraniczny (Holandia), tez bez plusa |
+
+Rozstrzyga `parseLeadPhone`, ktore scina `p:`, dokłada plus numerom
+z kierunkowym i oddaje reszte wspolnemu `parsePhone` (`lib/domain/phone.ts`).
+Plus dokladamy **wylacznie tutaj**: w panelu "11 cyfr bez plusa" zwykle znaczy
+literowke i ma sie odbic o komunikat, a w eksporcie z Meta znaczy kierunkowy.
+
+Wczesniej import mial wlasna, slabsza normalizacje i zapisywal numer tak, jak
+przyszedl. Ten sam czlowiek lezal w bazie jako `+48605687770`, `605687770`
+i `48605687770` - czyli jako trzy osoby, ktorych nie dalo sie ze soba powiazac.
+
+**Deduplikacja idzie po NUMERZE, nie po `externalId`.** Eksport z Ads Managera
+nie ma kolumny `lead_id`, wiec `externalId` byl pusty dla kazdego wiersza
+i cale zabezpieczenie nie robilo nic: wgranie tego samego pliku drugi raz
+zakladalo komplet leadów od nowa. Numer jest jedyna rzecza, ktora Meta zbiera
+obowiazkowo i ktora nalezy do jednej osoby. E-mail jako zapas, gdy numeru brak.
+
+**Nigdy po nazwisku.** Klub ma prawdziwych Nowakow, a w eksportach imiona bywaja
+jednowyrazowe (`Karolina`), ozdobne (`𝕵𝖚𝖗𝖆𝖓𝖉`) albo sa nazwa firmy - dwie rozne
+osoby potrafia wygladac identycznie.
+
+Istniejacego leada **nie nadpisujemy**. Klub mogl juz zmienic status, dopisac
+notatke albo umowic termin; swiezy wiersz z pliku cofnalby to do stanu "Nowy".
+
+### Naprawa tego, co juz weszlo zepsute
+
+`rawData` od poczatku trzyma CALY wiersz z pliku, wiec prawdziwe imie i surowy
+numer sa w bazie obok. Leady zaimportowane starym parserem da sie naprawic bez
+ponownego wgrywania czegokolwiek:
+
+```
+npx tsx prisma/napraw-leady.ts --env .env.vercel            # podglad
+npx tsx prisma/napraw-leady.ts --env .env.vercel --ustaw    # wykonanie
+```
+
+Skrypt przepisuje imie z `rawData` tam, gdzie `fullName` nie ma ani jednej
+litery, i sprowadza numery do jednej postaci. **Nie kasuje** leadow zdublowanych
+przez powtorny import - kazdy z nich mogl juz dostac status albo notatke, wiec
+scala sie je recznie; skrypt tylko mowi, ile ich jest.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-importu-leadow.ts
+```
+
+Wgrywa syntetyczny plik odtwarzajacy wszystkie dziwactwa realnego eksportu,
+wgrywa go drugi raz (ma nie zalozyc nic) i odzyskuje imie ze zepsutego wpisu.
+Plik testowy jest w skrypcie - prawdziwego eksportu nie ma w repozytorium
+i byc nie moze, bo to dane osobowe 185 osob.
+
 ## Hasła kadry
 
 Konta trenerów powstały ze wspólnym hasłem tymczasowym wpisanym w skrypcie

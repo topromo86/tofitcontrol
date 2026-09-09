@@ -9,7 +9,7 @@ import {
   buildWelcomeSms,
   LEAD_STATUS_LABEL,
   LEAD_STATUS_ORDER,
-  normalizePhone,
+  parseLeadPhone,
   splitFullName,
   buildWelcomeEmail,
   parseWelcomeChannel,
@@ -245,7 +245,7 @@ export async function saveCallSummaryAction(formData: FormData) {
   });
 
   // Dane kontaktowe: z formularza (jeśli uzupełniono), inaczej te z leada.
-  const phone = phoneRaw ? normalizePhone(phoneRaw) : lead.phone;
+  const phone = phoneRaw ? parseLeadPhone(phoneRaw) : lead.phone;
   if (phoneRaw && !phone) fail("Podany numer telefonu jest niepoprawny.");
   const email = emailRaw || lead.email;
 

@@ -4,6 +4,7 @@
 // zachowujemy w rawData, żeby nic nie zgubić.
 
 import type { LeadSource, LeadStatus } from "@/app/generated/prisma/client";
+import { parsePhoneOrNull } from "@/lib/domain/phone";
 
 export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
   FACEBOOK: "Facebook",
@@ -54,14 +55,32 @@ export function splitFullName(fullName: string): { firstName: string; lastName: 
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
-// Numer telefonu do wysyłki SMS - podstawowa normalizacja i walidacja. Nie
-// weryfikujemy operatora (to zrobi dostawca SMS), sprawdzamy tylko, czy to w
-// ogóle sensowny numer: opcjonalny "+", cyfry, 9-15 znaków (E.164). Spacje,
-// myślniki i nawiasy z formularza usuwamy. Zwraca null dla śmieci.
-export function normalizePhone(raw: string): string | null {
-  const cleaned = raw.replace(/[\s()-]/g, "");
-  if (!/^\+?\d{9,15}$/.test(cleaned)) return null;
-  return cleaned;
+// Numer telefonu z leada. Meta poprzedza go w eksporcie CSV znacznikiem `p:`
+// (`p:+48571277686`, `p:605687770`) - to nie jest część numeru, tylko marker
+// typu pola, więc ścinamy go, zanim numer trafi do parsera.
+//
+// Samo rozstrzyganie oddajemy `parsePhone` (`lib/domain/phone.ts`), bo to
+// jedyne miejsce w systemie, które wie, co jest numerem. Wcześniej import miał
+// własną, słabszą wersję: przepuszczała `48661535704` i `605687770` bez zmian,
+// więc ten sam człowiek lądował w bazie pod trzema różnymi zapisami
+// (`+48605687770`, `605687770`, `48605687770`), nie dawał się odnaleźć przy
+// powtórnym imporcie i wyglądał w kartotece jak trzy osoby. Dokładnie przed tym
+// ostrzega komentarz w phone.ts - a import go omijał.
+export function parseLeadPhone(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const bezMarkera = raw.replace(/^\s*p\s*:\s*/i, "").trim();
+  const cyfry = bezMarkera.replace(/[\s()-]/g, "");
+
+  // Meta pisze numer z kierunkowym, ale BEZ plusa: `48661535704`, `31613737346`.
+  // Wspólny parser czyta numer bez plusa jako krajowy dziewięciocyfrowy, więc
+  // odrzucał wszystko, co Meta wyeksportowała w tej postaci - na realnym pliku
+  // klubu 171 numerów ze 185. Dokładamy plus tylko tutaj, bo to jest quirk
+  // eksportu z Meta, a nie nowa reguła dla numerów wpisywanych w panelu: tam
+  // „11 cyfr bez plusa” zwykle znaczy literówkę i ma się odbić o komunikat.
+  const zKierunkowym =
+    /^\d{10,15}$/.test(cyfry) && !cyfry.startsWith("0") ? `+${cyfry}` : bezMarkera;
+
+  return parsePhoneOrNull(zKierunkowym);
 }
 
 // Treść SMS powitalnego po rozmowie z leadem. Krótko (jeden segment SMS to 160
@@ -115,22 +134,37 @@ export function parseCsv(input: string): string[][] {
   return rows.filter((r) => r.some((cell) => cell.trim().length > 0));
 }
 
+// Nagłówki porównujemy BEZ polskich znaków, więc aliasy są tu w wersji ASCII.
+// Powód z realnego pliku klubu: kolumna nazywa się "Imię Nazwisko" (bez "i"),
+// a alias brzmiał "imię i nazwisko" - nie pasował, więc parser nie znajdował
+// kolumny z nazwiskiem i podstawiał w to miejsce numer telefonu. Cały plik,
+// 185 osób, wjeżdżałby do klubu z imieniem "p:+48571277686".
 const NAME_ALIASES = [
   "full_name",
   "full name",
-  "imię i nazwisko",
   "imie i nazwisko",
+  "imie nazwisko",
+  "imie i naz",
   "name",
   "nazwa",
+  "imie",
 ];
 const EMAIL_ALIASES = ["email", "e-mail", "adres e-mail"];
 const PHONE_ALIASES = ["phone_number", "phone number", "phone", "numer telefonu", "telefon"];
 const CAMPAIGN_ALIASES = ["campaign_name", "campaign", "kampania", "form_name", "formularz"];
-const PLATFORM_ALIASES = ["platform", "źródło", "zrodlo"];
+const PLATFORM_ALIASES = ["platform", "zrodlo"];
 const ID_ALIASES = ["lead_id", "id"];
 
+// Bez ogonków, bez wielkości liter, bez podwójnych spacji. "ł" nie rozkłada się
+// w NFD (to osobny znak, nie "l" z kreską), więc podmieniamy je wprost.
 function normalize(h: string): string {
-  return h.trim().toLowerCase();
+  return h
+    .trim()
+    .toLowerCase()
+    .replace(/ł/g, "l")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ");
 }
 
 function findColumn(header: string[], aliases: string[], exact = false): number {
@@ -171,8 +205,12 @@ export function parseLeadsCsv(input: string): ParseResult {
     };
 
     const email = at(emailI);
-    const phone = at(phoneI);
-    const fullName = at(nameI) ?? email ?? phone;
+    // Numer sprowadzamy do jednej postaci (+48...) OD RAZU, a nie dopiero przy
+    // wysyłce: to on jest kluczem, po którym poznajemy, że ten sam człowiek
+    // przyszedł drugi raz. Surowy zapis z pliku zostaje w rawData.
+    const phoneRaw = at(phoneI);
+    const phone = parseLeadPhone(phoneRaw);
+    const fullName = at(nameI) ?? email ?? phone ?? phoneRaw;
     if (!fullName) {
       skipped++;
       continue;
@@ -197,6 +235,73 @@ export function parseLeadsCsv(input: string): ParseResult {
   }
 
   return { leads, skipped };
+}
+
+// Odczyt imienia i numeru z `rawData` już zapisanego leada.
+//
+// Potrzebne do naprawy tego, co weszło do bazy, ZANIM parser nauczył się czytać
+// nagłówek "Imię Nazwisko": takie leady mają w polu `fullName` numer telefonu.
+// Nic nie zginęło - `rawData` od początku trzyma cały wiersz z pliku, więc
+// nazwisko da się odzyskać bez ponownego wgrywania czegokolwiek.
+//
+// Ta sama tablica aliasów co przy imporcie, żeby naprawa i import nie miały jak
+// się rozjechać.
+export function leadFieldsFromRaw(raw: Record<string, unknown>): {
+  fullName: string | null;
+  phone: string | null;
+} {
+  const wpisy = Object.entries(raw).filter(
+    (e): e is [string, string] => typeof e[1] === "string" && e[1].trim().length > 0,
+  );
+  const znajdz = (aliases: string[]): string | null => {
+    const trafienie = wpisy.find(([klucz]) => {
+      const k = normalize(klucz);
+      return aliases.some((a) => k.includes(a));
+    });
+    return trafienie ? trafienie[1].trim() : null;
+  };
+
+  return {
+    fullName: znajdz(NAME_ALIASES),
+    phone: parseLeadPhone(znajdz(PHONE_ALIASES)),
+  };
+}
+
+// Po czym poznajemy, że to ten sam człowiek.
+//
+// NIGDY po nazwisku. Klub ma prawdziwych Nowaków, a w eksportach Meta imiona
+// bywają jednowyrazowe ("Karolina", "kuba"), ozdobne ("𝕵𝖚𝖗𝖆𝖓𝖉") albo są nazwą
+// firmy - dwie różne osoby potrafią wyglądać identycznie.
+//
+// Rozstrzyga numer telefonu, bo to jedyna rzecz, którą Meta zbiera obowiązkowo
+// i która należy do jednej osoby. E-mail jako zapas, gdy numeru brak. Bez
+// obu - nie udajemy, że wiemy: lead wchodzi, a ewentualną dublę wyłapie
+// człowiek na liście.
+export function leadIdentity(lead: { phone: string | null; email: string | null }): string | null {
+  if (lead.phone) return `tel:${lead.phone}`;
+  if (lead.email) return `mail:${lead.email.trim().toLowerCase()}`;
+  return null;
+}
+
+// Dublety WEWNĄTRZ jednego pliku. W realnym eksporcie klubu dwie osoby były
+// wpisane dwa razy (ten sam numer, ta sama treść) - bez tego kroku klub
+// dostałby je na liście podwójnie i obdzwaniał dwa razy.
+export function dedupeLeads(leads: ParsedLead[]): { unique: ParsedLead[]; duplicates: number } {
+  const widziane = new Set<string>();
+  const unique: ParsedLead[] = [];
+  let duplicates = 0;
+
+  for (const lead of leads) {
+    const key = leadIdentity(lead);
+    if (key && widziane.has(key)) {
+      duplicates++;
+      continue;
+    }
+    if (key) widziane.add(key);
+    unique.push(lead);
+  }
+
+  return { unique, duplicates };
 }
 
 // Treść e-maila powitalnego - alternatywa dla SMS-a. Ten sam moment kontaktu,

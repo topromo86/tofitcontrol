@@ -9,7 +9,7 @@ import {
   type MetaFieldEntry,
   type MetaLeadgenEntry,
 } from "@/lib/domain/meta-leads";
-import { normalizePhone } from "@/lib/domain/lead-import";
+import { parseLeadPhone } from "@/lib/domain/lead-import";
 import { logLeadActivity } from "@/lib/services/lead";
 
 // Automatyczny import leadów z Meta zamiast wklejania CSV.
@@ -137,7 +137,7 @@ export async function importLeadgenEntries(
         externalId: entry.leadgenId,
         fullName: fields?.fullName ?? placeholderName(entry.leadgenId),
         email: fields?.email ?? null,
-        phone: fields?.phone ? normalizePhone(fields.phone) : null,
+        phone: fields?.phone ? parseLeadPhone(fields.phone) : null,
         campaign: details?.campaign_name ?? details?.ad_name ?? null,
         // Surowa odpowiedź zostaje: gdy formularz w Meta ma nietypowe pola,
         // klub odczyta je z karty leada, zamiast szukać w Menedżerze reklam.

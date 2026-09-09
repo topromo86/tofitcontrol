@@ -1,7 +1,12 @@
 import "server-only";
 import { Prisma, type PrismaClient, type LeadActivityKind } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { LEAD_SOURCE_LABEL, parseLeadsCsv } from "@/lib/domain/lead-import";
+import {
+  LEAD_SOURCE_LABEL,
+  dedupeLeads,
+  leadIdentity,
+  parseLeadsCsv,
+} from "@/lib/domain/lead-import";
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -24,27 +29,66 @@ export async function logLeadActivity(
 
 export type ImportResult = { created: number; duplicates: number; skipped: number };
 
-// Import leadów z pliku CSV (eksport z Meta). Deduplikacja po (source,
-// externalId) - powtórny import tego samego pliku nie tworzy duplikatów.
-// Każdy nowy lead dostaje wpis IMPORTED w historii.
+// Import leadów z pliku CSV (eksport z Meta). Każdy nowy lead dostaje wpis
+// IMPORTED w historii.
+//
+// Deduplikacja idzie po NUMERZE TELEFONU (a gdy go brak - po e-mailu), nie po
+// `externalId`. Powód jest z realnego pliku klubu: eksport z Ads Managera nie
+// ma kolumny `lead_id`, więc `externalId` był pusty dla każdego wiersza i całe
+// zabezpieczenie nie robiło nic. Wgranie tego samego pliku drugi raz zakładało
+// komplet leadów od nowa - 185 osób do obdzwonienia po raz drugi, z zerowaną
+// historią kontaktu.
+//
+// `externalId` zostaje jako pierwsze kryterium, bo gdy Meta go poda, jest
+// pewniejszy niż numer (ta sama osoba może wypełnić dwa różne formularze).
+//
+// Istniejącego leada NIE nadpisujemy. Klub mógł już zmienić status, dopisać
+// notatkę albo umówić termin - świeży wiersz z pliku cofnąłby to wszystko do
+// stanu "Nowy".
 export async function importLeadsFromCsv(input: {
   csv: string;
   actorUserId: string;
 }): Promise<ImportResult> {
   const { leads, skipped } = parseLeadsCsv(input.csv);
-  let created = 0;
-  let duplicates = 0;
 
-  for (const l of leads) {
-    if (l.externalId) {
-      const existing = await prisma.lead.findUnique({
-        where: { source_externalId: { source: l.source, externalId: l.externalId } },
-        select: { id: true },
-      });
-      if (existing) {
-        duplicates++;
-        continue;
-      }
+  // Najpierw dublety wewnątrz pliku - inaczej ten sam numer wchodziłby dwa
+  // razy, bo drugiego jeszcze nie ma w bazie w chwili sprawdzania.
+  const { unique, duplicates: wPliku } = dedupeLeads(leads);
+
+  // Jedno zapytanie zamiast jednego na wiersz: przy 185 leadach to różnica
+  // między jedną podróżą do bazy a stu osiemdziesięcioma.
+  const telefony = unique.map((l) => l.phone).filter((p): p is string => Boolean(p));
+  const maile = unique.map((l) => l.email).filter((e): e is string => Boolean(e));
+  const znane = await prisma.lead.findMany({
+    where: { OR: [{ phone: { in: telefony } }, { email: { in: maile } }] },
+    select: { phone: true, email: true },
+  });
+  const wBazie = new Set(znane.map((l) => leadIdentity(l)).filter((k): k is string => k !== null));
+
+  const zewnetrzne = unique.map((l) => l.externalId).filter((id): id is string => Boolean(id));
+  const znaneZewnetrzne = new Set(
+    zewnetrzne.length > 0
+      ? (
+          await prisma.lead.findMany({
+            where: { externalId: { in: zewnetrzne } },
+            select: { source: true, externalId: true },
+          })
+        ).map((l) => `${l.source}:${l.externalId}`)
+      : [],
+  );
+
+  let created = 0;
+  let duplicates = wPliku;
+
+  for (const l of unique) {
+    if (l.externalId && znaneZewnetrzne.has(`${l.source}:${l.externalId}`)) {
+      duplicates++;
+      continue;
+    }
+    const key = leadIdentity(l);
+    if (key && wBazie.has(key)) {
+      duplicates++;
+      continue;
     }
 
     await prisma.$transaction(async (tx) => {
@@ -66,6 +110,9 @@ export async function importLeadsFromCsv(input: {
         summary: `Zaimportowano z: ${LEAD_SOURCE_LABEL[l.source]}${l.campaign ? ` · ${l.campaign}` : ""}`,
       });
     });
+    // Numer dopisujemy do zbioru od razu: dwa wiersze bez numeru, ale z tym
+    // samym e-mailem, też są jedną osobą.
+    if (key) wBazie.add(key);
     created++;
   }
 

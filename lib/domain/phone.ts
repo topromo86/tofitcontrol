@@ -69,6 +69,16 @@ export function parsePhone(raw: string): PhoneResult {
   return { phone: `${PHONE_PREFIX}${digits}` };
 }
 
+// Ta sama reguła, ale dla dróg, na których nie ma komu pokazać powodu odmowy:
+// import pliku z leadami i webhook z Meta. Tam numer albo jest, albo leada
+// obdzwoni się bez numeru - zatrzymywanie całego importu przez jeden śmieciowy
+// wpis byłoby gorsze niż jego brak.
+export function parsePhoneOrNull(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const result = parsePhone(raw);
+  return "phone" in result ? result.phone : null;
+}
+
 // Do wyświetlania. Polskie numery rozdzielamy po trzy cyfry (+48 500 600 700),
 // bo tak się je u nas czyta. Zagranicznych nie grupujemy - każdy kraj robi to
 // inaczej i zgadywanie skończyłoby się gorzej niż brak grupowania.

@@ -4,30 +4,143 @@ import {
   buildWelcomeEmail,
   parseWelcomeChannel,
   missingWelcomeContact,
-  normalizePhone,
+  parseLeadPhone,
+  dedupeLeads,
+  leadIdentity,
   parseCsv,
   parseLeadsCsv,
   splitFullName,
 } from "./lead-import";
 
-describe("normalizePhone", () => {
-  it("usuwa spacje, myślniki i nawiasy", () => {
-    expect(normalizePhone("+48 555-111 222")).toBe("+48555111222");
-    expect(normalizePhone("(48) 555 111 222")).toBe("48555111222");
+describe("parseLeadPhone", () => {
+  // Wszystkie postacie pochodzą z realnego eksportu klubu (Czapla Boxing,
+  // wrzesień 2026) - w jednym pliku było ich pięć naraz.
+  it("ścina znacznik `p:`, którym Meta poprzedza numer", () => {
+    expect(parseLeadPhone("p:+48571277686")).toBe("+48571277686");
+    expect(parseLeadPhone("p:605687770")).toBe("+48605687770");
   });
 
-  it("akceptuje numer bez plusa", () => {
-    expect(normalizePhone("555111222")).toBe("555111222");
+  it("przyjmuje numer z kierunkowym, ale bez plusa - tak eksportuje Meta", () => {
+    expect(parseLeadPhone("48661535704")).toBe("+48661535704");
   });
 
-  it("odrzuca za krótkie i za długie", () => {
-    expect(normalizePhone("12345")).toBeNull();
-    expect(normalizePhone("1234567890123456")).toBeNull();
+  it("dziewięć cyfr czyta jako polski numer", () => {
+    expect(parseLeadPhone("783925065")).toBe("+48783925065");
   });
 
-  it("odrzuca litery i śmieci", () => {
-    expect(normalizePhone("zadzwon-do-mnie")).toBeNull();
-    expect(normalizePhone("")).toBeNull();
+  it("nie zamienia numeru zagranicznego w polski", () => {
+    expect(parseLeadPhone("31613737346")).toBe("+31613737346");
+    expect(parseLeadPhone("+380671234567")).toBe("+380671234567");
+  });
+
+  it("sprowadza ten sam numer do jednej postaci, w jakikolwiek sposób zapisany", () => {
+    const jeden = [
+      "p:+48605687770",
+      "605687770",
+      "48605687770",
+      "+48 605 687 770",
+      "0048605687770",
+    ];
+    expect(new Set(jeden.map(parseLeadPhone))).toEqual(new Set(["+48605687770"]));
+  });
+
+  it("odrzuca śmieci zamiast zgadywać", () => {
+    expect(parseLeadPhone("zadzwon-do-mnie")).toBeNull();
+    expect(parseLeadPhone("12345")).toBeNull();
+    expect(parseLeadPhone("")).toBeNull();
+    expect(parseLeadPhone(null)).toBeNull();
+  });
+});
+
+describe("dedupeLeads", () => {
+  const lead = (fullName: string, phone: string | null, email: string | null = null) => ({
+    fullName,
+    email,
+    phone,
+    source: "META_OTHER" as const,
+    campaign: null,
+    externalId: null,
+    rawData: {},
+  });
+
+  it("usuwa powtórzony numer w obrębie jednego pliku", () => {
+    const { unique, duplicates } = dedupeLeads([
+      lead("Adam Krawczyk", "+48501362278"),
+      lead("Sylwia Wagstyl", "+48509993430"),
+      lead("Adam Krawczyk", "+48501362278"),
+    ]);
+    expect(unique).toHaveLength(2);
+    expect(duplicates).toBe(1);
+  });
+
+  it("nie skleja dwóch osób po samym nazwisku", () => {
+    const { unique, duplicates } = dedupeLeads([
+      lead("Adam Krawczyk", "+48501362278"),
+      lead("Adam Krawczyk", "+48600100200"),
+    ]);
+    expect(unique).toHaveLength(2);
+    expect(duplicates).toBe(0);
+  });
+
+  it("bez numeru i bez e-maila nie zgaduje - przepuszcza oba", () => {
+    const { unique } = dedupeLeads([lead("Karolina", null), lead("Karolina", null)]);
+    expect(unique).toHaveLength(2);
+  });
+
+  it("gdy numeru brak, rozstrzyga e-mail bez względu na wielkość liter", () => {
+    const { duplicates } = dedupeLeads([
+      lead("Jan", null, "Jan@example.com"),
+      lead("Jan N.", null, "jan@example.com"),
+    ]);
+    expect(duplicates).toBe(1);
+  });
+});
+
+describe("leadIdentity", () => {
+  it("numer ma pierwszeństwo przed e-mailem", () => {
+    expect(leadIdentity({ phone: "+48500600700", email: "a@b.pl" })).toBe("tel:+48500600700");
+  });
+
+  it("bez kontaktu nie ma tożsamości", () => {
+    expect(leadIdentity({ phone: null, email: null })).toBeNull();
+  });
+});
+
+describe("parseLeadsCsv - nagłówki z realnych eksportów", () => {
+  // Plik klubu miał kolumnę "Imię Nazwisko" (bez "i"), a alias brzmiał
+  // "imię i nazwisko". Kolumna nie pasowała, więc w miejsce nazwiska wchodził
+  // numer telefonu - 185 osób z imieniem "p:+48571277686".
+  it("rozpoznaje kolumnę 'Imię Nazwisko' bez spójnika", () => {
+    const csv = ["Imię Nazwisko,Numer Telefonu", "Kamila Drab,p:+48571277686"].join("\n");
+    const { leads } = parseLeadsCsv(csv);
+    expect(leads[0].fullName).toBe("Kamila Drab");
+    expect(leads[0].phone).toBe("+48571277686");
+  });
+
+  it("nie potyka się o ogonki ani o wielkość liter w nagłówku", () => {
+    for (const naglowek of ["IMIĘ NAZWISKO", "imie nazwisko", "Imię i nazwisko", "Full Name"]) {
+      const { leads } = parseLeadsCsv([`${naglowek},Telefon`, "Jan Kowalski,500600700"].join("\n"));
+      expect(leads[0].fullName).toBe("Jan Kowalski");
+    }
+  });
+
+  it("zachowuje odpowiedzi z formularza w rawData", () => {
+    const csv = [
+      "Imię Nazwisko,Numer Telefonu,Dlaczego chcialbys trenowac boks?",
+      'Marek Uszok,48515948006,"Chcialbym sprobowac, a przede wszystkim zrzucic kilka kilogramow."',
+    ].join("\n");
+    const { leads } = parseLeadsCsv(csv);
+    expect(leads[0].rawData["Dlaczego chcialbys trenowac boks?"]).toContain("zrzucic kilka");
+    // Surowy zapis numeru zostaje - to jedyny ślad tego, co było w pliku.
+    expect(leads[0].rawData["Numer Telefonu"]).toBe("48515948006");
+  });
+
+  it("pomija puste wiersze na końcu eksportu", () => {
+    const csv = ["Imię Nazwisko,Numer Telefonu", "Jan Kowalski,500600700", ",", ",", ","].join(
+      "\n",
+    );
+    const { leads } = parseLeadsCsv(csv);
+    expect(leads).toHaveLength(1);
   });
 });
 
@@ -126,7 +239,7 @@ describe("parseLeadsCsv", () => {
     const { leads } = parseLeadsCsv(csv);
     expect(leads[0]).toMatchObject({
       fullName: "Anna Nowak",
-      phone: "111222333",
+      phone: "+48111222333",
       email: null,
       source: "META_OTHER",
     });

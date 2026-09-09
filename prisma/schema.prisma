@@ -1297,6 +1297,9 @@ model Lead {
   @@index([status])
   @@index([assignedToUserId])
   @@index([reminderAt])
+  // Import szuka po numerze, czy ten człowiek już był - to jedyne kryterium,
+  // które działa dla eksportów z Meta (nie mają kolumny lead_id).
+  @@index([phone])
 }
 
 // Notatka do leada - widoczna wyłącznie w panelu admina/trenera z dostępem.
