@@ -420,6 +420,13 @@ ryzyko bez zysku.
 **Przed usunieciem opcji trzeba usunac dane demo z bazy** - inaczej zostana
 w klubie na zawsze, bo zniknie jedyne narzedzie, ktore umie je skasowac.
 
+Do usuniecia po starcie jest tez `prisma/porzadki-wplat.ts` - narzedzie do
+sprzatania wplat testowych przed oddaniem systemu. Kasuje `Payment` naprawde
+i bezpowrotnie, razem z korektami, realizacjami kart podarunkowych i wierszami
+`CashDay`. W normalnej pracy klubu pomylke poprawia sie przyciskiem "Pomylka -
+anuluj wplate", ktory zostawia slad; skrypt kasujacy historie pieniedzy nie ma
+prawa lezec pod reka, gdy klub juz dziala.
+
 ### Sprawdzenie
 
 ```
