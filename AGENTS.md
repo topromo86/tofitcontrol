@@ -557,6 +557,25 @@ osoby potrafia wygladac identycznie.
 Istniejacego leada **nie nadpisujemy**. Klub mogl juz zmienic status, dopisac
 notatke albo umowic termin; swiezy wiersz z pliku cofnalby to do stanu "Nowy".
 
+### Domyslny widok to KOLEJKA PRACY, nie cala baza
+
+`/leady` otwiera sie na zakladce **"Do obdzwonienia"** z licznikiem, obejmujacej
+statusy `NEW` **i** `CALLBACK`.
+
+Powod z uzywania: zaimportowany lead dostaje `NEW` ("Nowy"), a zakladka
+"Do oddzwonienia" pokazuje wylacznie `CALLBACK` - czyli osobny stan "dzwonilem,
+nie odebral". Swiezy import wpadal wiec do zakladki, w ktora nikt nie zaglada,
+i wygladalo to tak, jakby import nie zadzialal.
+
+Dla czlowieka z telefonem w reku oba statusy znacza to samo: **jest do
+obdzwonienia**. Rozroznienie ma sens dopiero w statystykach lejka, wiec zostaje
+w statusach, a nie w widoku, od ktorego zaczyna sie dzien.
+
+Komunikat po imporcie mowi teraz, KTO byl juz w bazie (do pieciu nazwisk plus
+"i N innych"), a nie tylko ilu ich bylo. Sama liczba nie odpowiada na pytanie,
+czy to ci sami ludzie co poprzednio, czy plik mial zla kolumne i klub wlasnie
+stracil nowych chetnych.
+
 ### Naprawa tego, co juz weszlo zepsute
 
 `rawData` od poczatku trzyma CALY wiersz z pliku, wiec prawdziwe imie i surowy

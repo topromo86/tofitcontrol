@@ -23,11 +23,28 @@ const IMPORT_MESSAGE = (p: {
   created?: string;
   dup?: string;
   skip?: string;
+  ktoDup?: string;
 }): string | null => {
   if (p.import === "empty") return "Nie wskazano pliku ani treści CSV.";
-  if (p.import === "ok")
-    return `Zaimportowano ${p.created ?? 0} nowych leadów (duplikaty: ${p.dup ?? 0}, pominięte: ${p.skip ?? 0}).`;
-  return null;
+  if (p.import !== "ok") return null;
+
+  const nowych = Number(p.created ?? 0);
+  const dubli = Number(p.dup ?? 0);
+  const pominiete = Number(p.skip ?? 0);
+
+  const czesci = [
+    nowych > 0
+      ? `Dodano ${nowych} nowych leadów - czekają na liście "Do obdzwonienia".`
+      : "Nie dodano żadnego nowego leada.",
+  ];
+  if (dubli > 0) {
+    // Kto konkretnie, a nie sama liczba: "duplikaty: 3" nie mówi, czy to ci
+    // sami ludzie co ostatnio, czy plik miał złą kolumnę.
+    const kto = p.ktoDup ? ` (${p.ktoDup}${dubli > 5 ? ` i ${dubli - 5} innych` : ""})` : "";
+    czesci.push(`${dubli} osób było już w bazie${kto} - pominięte, nic im nie nadpisałem.`);
+  }
+  if (pominiete > 0) czesci.push(`${pominiete} wierszy bez danych kontaktowych pominiętych.`);
+  return czesci.join(" ");
 };
 
 export default async function LeadsListPage({
@@ -35,10 +52,12 @@ export default async function LeadsListPage({
 }: {
   searchParams: Promise<{
     status?: string;
+    widok?: string;
     import?: string;
     created?: string;
     dup?: string;
     skip?: string;
+    ktoDup?: string;
   }>;
 }) {
   await requireLeadAccess();
@@ -46,18 +65,33 @@ export default async function LeadsListPage({
   const activeStatus = LEAD_STATUS_ORDER.includes(params.status as LeadStatus)
     ? (params.status as LeadStatus)
     : null;
+  // Domyslny widok to KOLEJKA PRACY, a nie cala baza: "Nowy" (swiezo
+  // zaimportowany, nikt jeszcze nie dzwonil) i "Do oddzwonienia" (dzwonil, nie
+  // odebral). Obie znacza to samo dla czlowieka z telefonem w reku - jest do
+  // obdzwonienia - a rozroznienie ma sens dopiero w statystykach lejka.
+  // Bez tego swiezy import wpadal do "Nowy" i znikal z oczu, bo zakladka
+  // "Do oddzwonienia" pokazuje wylacznie CALLBACK.
+  const DO_OBDZWONIENIA: LeadStatus[] = ["NEW", "CALLBACK"];
+  const widokKolejki = activeStatus === null && params.widok !== "wszystkie";
   const importMsg = IMPORT_MESSAGE(params);
   const metaConfigured = isMetaLeadsConfigured();
   // Dwa stopnie: gniazdo przyjmuje zgłoszenia (verify token + sekret), a token
   // strony dokłada automatyczne pobranie danych osoby.
   const metaFullData = canFetchLeadDetails();
 
-  const leads = await prisma.lead.findMany({
-    where: activeStatus ? { status: activeStatus } : {},
-    include: { assignedTo: { select: { name: true } } },
-    orderBy: [{ reminderAt: { sort: "asc", nulls: "last" } }, { importedAt: "desc" }],
-    take: 200,
-  });
+  const [leads, doObdzwonienia] = await Promise.all([
+    prisma.lead.findMany({
+      where: activeStatus
+        ? { status: activeStatus }
+        : widokKolejki
+          ? { status: { in: DO_OBDZWONIENIA } }
+          : {},
+      include: { assignedTo: { select: { name: true } } },
+      orderBy: [{ reminderAt: { sort: "asc", nulls: "last" } }, { importedAt: "desc" }],
+      take: 200,
+    }),
+    prisma.lead.count({ where: { status: { in: DO_OBDZWONIENIA } } }),
+  ]);
   const now = new Date();
 
   return (
@@ -125,11 +159,18 @@ export default async function LeadsListPage({
         </div>
       </section>
 
-      {/* Filtry statusu */}
+      {/* Widoki. Pierwszy jest kolejką pracy, nie filtrem statusu - to od niego
+          zaczyna się dzień, więc jest domyślny i ma licznik. */}
       <div className="flex flex-wrap gap-2">
         <Link
           href="/leady"
-          className={`rounded-md border px-3 py-1.5 text-sm ${activeStatus === null ? "border-brand-red text-brand-red font-medium" : "border-line bg-surface text-text"}`}
+          className={`rounded-md border px-3 py-1.5 text-sm ${widokKolejki ? "border-brand-red text-brand-red font-medium" : "border-line bg-surface text-text"}`}
+        >
+          Do obdzwonienia ({doObdzwonienia})
+        </Link>
+        <Link
+          href="/leady?widok=wszystkie"
+          className={`rounded-md border px-3 py-1.5 text-sm ${activeStatus === null && !widokKolejki ? "border-brand-red text-brand-red font-medium" : "border-line bg-surface text-text"}`}
         >
           Wszystkie
         </Link>
@@ -147,7 +188,9 @@ export default async function LeadsListPage({
       {/* Lista */}
       {leads.length === 0 ? (
         <p className="text-muted-brand border-line bg-surface rounded-md border p-4 text-sm">
-          Brak leadów w tym widoku. Zaimportuj plik CSV powyżej.
+          {widokKolejki
+            ? "Nikogo nie ma do obdzwonienia - wszyscy obsłużeni. Zaimportuj plik CSV powyżej."
+            : "Brak leadów w tym widoku. Zaimportuj plik CSV powyżej."}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

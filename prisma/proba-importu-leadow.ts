@@ -82,7 +82,7 @@ async function main() {
 
     const leady = await prisma.lead.findMany({
       where: { phone: { in: OCZEKIWANE_NUMERY } },
-      select: { id: true, fullName: true, phone: true, rawData: true },
+      select: { id: true, fullName: true, phone: true, rawData: true, status: true },
     });
     zalozone.push(...leady.map((l) => l.id));
 
@@ -109,11 +109,26 @@ async function main() {
       ).includes("Wzmocnienie"),
     );
 
+    console.log("\n=== 2b. Trafiaja do kolejki do obdzwonienia ===");
+    // Kolejka pracy na /leady to statusy NEW + CALLBACK. Swiezy import musi tam
+    // wpasc, inaczej nikt do tych ludzi nie zadzwoni.
+    const doObdzwonienia = leady.filter((l) => l.status === "NEW" || l.status === "CALLBACK");
+    sprawdz(
+      "wszystkie zaimportowane czekaja na telefon",
+      doObdzwonienia.length === leady.length,
+      `${doObdzwonienia.length}/${leady.length}`,
+    );
+
     console.log("\n=== 3. Ten sam plik drugi raz ===");
     const drugi = await importLeadsFromCsv({ csv: CSV, actorUserId: admin.id });
     console.log(`  utworzone=${drugi.created} dublety=${drugi.duplicates}`);
     sprawdz("nie zakłada niczego po raz drugi", drugi.created === 0);
     sprawdz("zgłasza wszystkich jako dublety", drugi.duplicates === 8);
+    sprawdz(
+      "mowi KTO byl juz w bazie, nie tylko ilu",
+      drugi.duplicateNames.includes("Kamila Drab"),
+      drugi.duplicateNames.slice(0, 3).join(", "),
+    );
 
     console.log("\n=== 4. Odzyskanie imienia ze starego, zepsutego wpisu ===");
     const zepsuty = await prisma.lead.create({

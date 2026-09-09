@@ -27,7 +27,15 @@ export async function logLeadActivity(
   });
 }
 
-export type ImportResult = { created: number; duplicates: number; skipped: number };
+export type ImportResult = {
+  created: number;
+  duplicates: number;
+  skipped: number;
+  // Kto konkretnie byl juz w bazie. Sama liczba nie wystarcza: "duplikaty: 3"
+  // nie mowi, czy to ci sami ludzie co ostatnio, czy klub wlasnie stracil
+  // trzech nowych chetnych przez zla kolumne w pliku.
+  duplicateNames: string[];
+};
 
 // Import leadów z pliku CSV (eksport z Meta). Każdy nowy lead dostaje wpis
 // IMPORTED w historii.
@@ -79,15 +87,18 @@ export async function importLeadsFromCsv(input: {
 
   let created = 0;
   let duplicates = wPliku;
+  const duplicateNames: string[] = [];
 
   for (const l of unique) {
     if (l.externalId && znaneZewnetrzne.has(`${l.source}:${l.externalId}`)) {
       duplicates++;
+      duplicateNames.push(l.fullName);
       continue;
     }
     const key = leadIdentity(l);
     if (key && wBazie.has(key)) {
       duplicates++;
+      duplicateNames.push(l.fullName);
       continue;
     }
 
@@ -116,5 +127,5 @@ export async function importLeadsFromCsv(input: {
     created++;
   }
 
-  return { created, duplicates, skipped };
+  return { created, duplicates, skipped, duplicateNames };
 }

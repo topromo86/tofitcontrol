@@ -37,8 +37,12 @@ export async function importCsvAction(formData: FormData) {
 
   const result = await importLeadsFromCsv({ csv, actorUserId: session.user.id });
   revalidatePath("/leady");
+  // Nazwiska duplikatow w adresie, ale najwyzej piec - dluga lista rozsadzilaby
+  // pasek adresu, a klubowi wystarczy wiedziec, kogo dotyczy i ilu bylo.
+  const kto = result.duplicateNames.slice(0, 5).join("; ");
   redirect(
-    `/leady?import=ok&created=${result.created}&dup=${result.duplicates}&skip=${result.skipped}`,
+    `/leady?import=ok&created=${result.created}&dup=${result.duplicates}` +
+      `&skip=${result.skipped}${kto ? `&ktoDup=${encodeURIComponent(kto)}` : ""}`,
   );
 }
 
