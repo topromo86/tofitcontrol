@@ -3,7 +3,7 @@ import { SETTLEMENT_LABEL, settlePass, sumPayments } from "@/lib/domain/payment-
 import { formatDate, formatMoney } from "@/lib/format";
 import { addCalendarDays, todayInTimeZone } from "@/lib/domain/time";
 import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "./submit-button";
 import { Input } from "@/components/ui/input";
 import { recordPaymentAction, sellPassAction } from "./payment-actions";
 
@@ -58,6 +58,10 @@ export function PaymentsList({
   // dziurą w mechanizmie, który ma jej pilnować. Serwer sprawdza to jeszcze raz
   // (app/payment-actions.ts), bo ukrycie pola niczego nie broni.
   mozeWybracDate = false,
+  // Plan podstawiony w formularzu - przychodzi z "Przedłuż karnet" w kartotece,
+  // żeby przedłużenie było jednym wyborem mniej. Gdy plan nie pasuje do tego
+  // klienta (dorosły/dziecko), <select> zignoruje go i zostanie pierwszy z listy.
+  defaultPlanId,
 }: {
   members: PaymentsMember[];
   plans: PaymentsPlan[];
@@ -67,6 +71,7 @@ export function PaymentsList({
   q: string;
   now: Date;
   mozeWybracDate?: boolean;
+  defaultPlanId?: string;
 }) {
   const dzis = todayInTimeZone(now);
   const dzisIso = isoDay(dzis);
@@ -188,9 +193,9 @@ export function PaymentsList({
                               className={SELECT}
                             />
                           ) : null}
-                          <Button type="submit" size="sm" variant="outline">
+                          <SubmitButton pendingLabel="Zapisuję..." variant="outline">
                             Przyjmij dopłatę
-                          </Button>
+                          </SubmitButton>
                         </form>
                       ) : null}
                     </li>
@@ -204,7 +209,17 @@ export function PaymentsList({
               <input type="hidden" name="q" value={q} />
               <input type="hidden" name="returnTo" value={returnTo} />
               <div className="flex flex-wrap items-center gap-2">
-                <select name="planId" required aria-label="Rodzaj karnetu" className={SELECT}>
+                <select
+                  name="planId"
+                  required
+                  aria-label="Rodzaj karnetu"
+                  defaultValue={
+                    defaultPlanId && availablePlans.some((p) => p.id === defaultPlanId)
+                      ? defaultPlanId
+                      : undefined
+                  }
+                  className={SELECT}
+                >
                   {availablePlans.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} - {(p.priceGross / 100).toFixed(0)} zł
@@ -256,9 +271,9 @@ export function PaymentsList({
                     className={SELECT}
                   />
                 ) : null}
-                <Button type="submit" size="sm" className="ml-auto">
+                <SubmitButton pendingLabel="Zapisuję..." className="ml-auto">
                   Przyjmij wpłatę
-                </Button>
+                </SubmitButton>
               </div>
 
               {/* Kod rabatowy i karta podarunkowa - zwinięte, żeby nie

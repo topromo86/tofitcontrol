@@ -304,6 +304,31 @@ export default async function AdminMembersPage({
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Sprzedaż idzie tam, gdzie żyją reguły pieniędzy - do jedynego
+                      formularza sprzedaży, z ustawionym klientem. Powielanie go
+                      tutaj oznaczałoby drugie miejsce z rabatami, kartami
+                      podarunkowymi i kasą, a więc drugie miejsce do rozjechania.
+                      "Przedłuż" dokłada tylko podstawiony plan z obecnego karnetu:
+                      sprzedaż sama zaczyna nowy karnet od końca starego, więc
+                      przedłużenie to ta sama operacja, nie osobna. */}
+                  <Link
+                    href={
+                      activePass
+                        ? `/admin/wplaty?klient=${m.id}&plan=${activePass.planId}`
+                        : `/admin/wplaty?klient=${m.id}`
+                    }
+                  >
+                    <Button type="button" size="sm" variant="outline">
+                      {activePass ? "Przedłuż karnet" : "Dodaj karnet"}
+                    </Button>
+                  </Link>
+                  {activePass ? (
+                    <Link href={`/admin/wplaty?klient=${m.id}`}>
+                      <Button type="button" size="sm" variant="ghost">
+                        Inny karnet
+                      </Button>
+                    </Link>
+                  ) : null}
                   {isFrozen ? (
                     <form action={unfreezePassAction}>
                       <input type="hidden" name="passId" value={activePass!.id} />

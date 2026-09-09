@@ -11,6 +11,7 @@ import {
 import { effectiveTrainerId } from "@/lib/domain/substitute";
 import { formatPhone } from "@/lib/domain/phone";
 import { getClubSettings } from "@/lib/services/settings";
+import { undoTrainerCheckInWaiveAction, waiveTrainerCheckInAction } from "./actions";
 
 // Pulpit właściciela - ekran startowy admina po zalogowaniu. Dwie rzeczy naraz:
 // szybki obraz kondycji klubu (KPI) i lista tego, co dziś wymaga jego decyzji
@@ -188,7 +189,7 @@ export default async function AdminDashboardPage() {
 
   // Termin odbicia minął, a trenera nie ma - dopiero to jest alertem.
   // Zajęcia, do których jest jeszcze czas, nie zawracają nikomu głowy.
-  const missingCheckIns = todayNoTrainerCheckIn.filter(
+  const bezOdbicia = todayNoTrainerCheckIn.filter(
     (s) =>
       classifyTrainerCheckIn({
         session: s,
@@ -197,6 +198,11 @@ export default async function AdminDashboardPage() {
         minutesBefore: settings.trainerCheckInMinutesBefore,
       }) === "MISSING",
   );
+  // Wyciszone zostają na liście, tylko wyszarzone i z przyciskiem cofnięcia -
+  // znikanie bez śladu po jednym kliknięciu byłoby gorsze niż sam alert.
+  // Do licznika u góry liczą się wyłącznie te niewyjaśnione.
+  const missingCheckIns = bezOdbicia.filter((s) => s.trainerCheckInWaivedAt === null);
+  const wyciszone = bezOdbicia.filter((s) => s.trainerCheckInWaivedAt !== null);
 
   const attention = [
     {
@@ -339,7 +345,7 @@ export default async function AdminDashboardPage() {
       {/* Szczegóły alertu o braku odbicia. Sam alert nazywa problem, a tutaj
           jest to, czego właściciel potrzebuje, żeby zareagować: które zajęcia,
           kto miał je prowadzić i pod jaki numer zadzwonić. */}
-      {missingCheckIns.length > 0 ? (
+      {bezOdbicia.length > 0 ? (
         <section id="bez-odbicia" className="flex flex-col gap-3">
           <h2 className="text-amber font-mono text-xs tracking-widest uppercase">
             Bez odbicia prowadzącego
@@ -364,21 +370,73 @@ export default async function AdminDashboardPage() {
                     {s.trainer.user.phone ? ` · ${formatPhone(s.trainer.user.phone)}` : ""}
                   </p>
                 </div>
-                {/* Numer jako odnośnik tel: - na telefonie właściciela to jedno
-                    dotknięcie zamiast przepisywania cyfr. */}
-                {s.trainer.user.phone ? (
-                  <a
-                    href={`tel:${s.trainer.user.phone}`}
-                    className="border-amber text-amber hover:bg-amber/10 shrink-0 rounded-md border px-3 py-1.5 font-mono text-xs tracking-widest uppercase"
-                  >
-                    Zadzwoń
-                  </a>
-                ) : (
-                  <span className="text-muted-brand shrink-0 font-mono text-xs">brak numeru</span>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* Numer jako odnośnik tel: - na telefonie właściciela to jedno
+                      dotknięcie zamiast przepisywania cyfr. */}
+                  {s.trainer.user.phone ? (
+                    <a
+                      href={`tel:${s.trainer.user.phone}`}
+                      className="border-amber text-amber hover:bg-amber/10 rounded-md border px-3 py-1.5 font-mono text-xs tracking-widest uppercase"
+                    >
+                      Zadzwoń
+                    </a>
+                  ) : (
+                    <span className="text-muted-brand font-mono text-xs">brak numeru</span>
+                  )}
+                  {/* Po sprawdzeniu alert ma zniknąć. Komentarz jest opcjonalny -
+                      wymuszanie pisania przy każdym wyciszeniu skończyłoby się
+                      wpisywaniem kropki. Ślad w historii zostaje tak czy tak. */}
+                  <form action={waiveTrainerCheckInAction} className="flex items-center gap-2">
+                    <input type="hidden" name="sessionId" value={s.id} />
+                    <input
+                      name="note"
+                      placeholder="Co ustaliłeś? (opcjonalnie)"
+                      className="border-line bg-surface-2 text-text h-8 w-48 rounded-md border px-2 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      className="border-line text-muted-brand hover:text-text hover:border-text rounded-md border px-3 py-1.5 font-mono text-xs tracking-widest uppercase"
+                    >
+                      Wyjaśnione
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
+
+          {wyciszone.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-muted-brand font-mono text-[11px] tracking-widest uppercase">
+                Wyjaśnione dziś ({wyciszone.length})
+              </p>
+              <ul className="flex flex-col gap-2">
+                {wyciszone.map((s) => (
+                  <li
+                    key={s.id}
+                    className="border-line bg-surface text-muted-brand flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"
+                  >
+                    <span className="min-w-0">
+                      <span className="font-mono text-xs">{time(s.startsAt)}</span> {s.name} ·{" "}
+                      {s.location.name}
+                      {s.trainerCheckInWaivedNote ? (
+                        <span className="text-text"> - {s.trainerCheckInWaivedNote}</span>
+                      ) : null}
+                    </span>
+                    <form action={undoTrainerCheckInWaiveAction}>
+                      <input type="hidden" name="sessionId" value={s.id} />
+                      <button
+                        type="submit"
+                        className="border-line hover:text-text hover:border-text shrink-0 rounded-md border px-3 py-1 font-mono text-xs tracking-widest uppercase"
+                      >
+                        Cofnij
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : null}
 

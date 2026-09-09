@@ -578,6 +578,60 @@ wgrywa go drugi raz (ma nie zalozyc nic) i odzyskuje imie ze zepsutego wpisu.
 Plik testowy jest w skrypcie - prawdziwego eksportu nie ma w repozytorium
 i byc nie moze, bo to dane osobowe 185 osob.
 
+## Wyciszenie alertu "brak odbicia prowadzacego"
+
+Alert na pulpicie mowi: minal termin, a kodu nikt nie zeskanowal. Powodow bywa
+kilka i wiekszosc nie jest awaria - trener prowadzil i zapomnial, nikt nie
+przyszedl na zajecia, tablet sie nie wlaczyl. Wlasciciel sprawdza to jednym
+telefonem i wtedy alert ma zniknac, bo inaczej wisi do polnocy i uczy, zeby na
+niego nie patrzec. **Alert, na ktory sie nie patrzy, nie jest alertem.**
+
+Przycisk **"Wyjasnione"** (tylko ADMIN) zapisuje `trainerCheckInWaivedAt/By/Note`
+na zajeciach. Wyciszone znikaja z licznika u gory, ale **zostaja na liscie**
+wyszarzone, z komentarzem i przyciskiem "Cofnij" - znikanie bez sladu po jednym
+kliknieciu byloby gorsze niz sam alert. Komentarz jest opcjonalny: wymuszanie
+pisania przy kazdym wyciszeniu skonczyloby sie wpisywaniem kropki. Slad
+w `ActivityLog` (`TRAINER_CHECKIN_WAIVED`) zostaje tak czy tak, bo to jest
+pytanie o to, kto realnie pracowal.
+
+Wyciszenie **nie zapisuje odbicia prowadzacego** - zajecia nadal nie maja sladu,
+kto je poprowadzil, i tak ma zostac. Zapis odbicia wstecz zmienialby dane, od
+ktorych liczy sie wyplata (`lib/services/payroll.ts` liczy kazda sesje
+prowadzona przez trenera), wiec to jest decyzja o innym ciezarze.
+
+## Przycisk, ktory mowi "robie"
+
+`app/submit-button.tsx` (`SubmitButton`) pokazuje kolko i blokuje sie na czas
+wysylki, korzystajac z `useFormStatus`.
+
+Powod nie jest kosmetyczny: akcja serwerowa wyglada po kliknieciu dokladnie tak
+samo jak brak klikniecia. Przy imporcie stu osiemdziesieciu leadow albo przy
+sprzedazy karnetu na wolnym wifi to trwa kilka sekund, w ktorych czlowiek nie
+wie, czy trafil w przycisk - a naturalna reakcja, czyli klikniecie drugi raz,
+kosztuje **drugi karnet i druga wplate**, bo sprzedaz nie ma idempotencji.
+Dlatego przycisk jest uzyty tam, gdzie podwojne klikniecie kosztuje pieniadze
+(kasa) i tam, gdzie operacja trwa (import leadow).
+
+`useFormStatus` musi siedziec w komponencie DZIECKU formularza, nie w tym samym,
+co `<form>` - stad osobny plik zamiast flagi w miejscu uzycia.
+
+## Sprzedaz karnetu z kartoteki
+
+Lista klientow (`/admin`) ma przy nazwisku **"Dodaj karnet"**, a gdy karnet jest
+aktywny - **"Przedluz karnet"** (z podstawionym tym samym planem) i "Inny
+karnet". Wszystkie prowadza do `/admin/wplaty?klient=<id>`, czyli do JEDYNEGO
+formularza sprzedazy.
+
+Swiadomie nie ma tu wlasnego formularza sprzedazy. Powielenie go w kartotece
+oznaczaloby drugie miejsce z rabatami, kartami podarunkowymi, kontrola
+demo/produkcja i data wplaty - a wiec drugie miejsce do rozjechania z pierwszym.
+"Przedluzenie" nie jest osobna operacja: `sellPass` sam zaczyna nowy karnet od
+`endsAt` starego (SPEC.md sekcja 2), wiec przedluzenie to ta sama sprzedaz, tylko
+z podpowiedzianym planem.
+
+Parametr `klient` (id) wygrywa z wyszukiwaniem po nazwisku `q`, bo wskazuje jedna
+osobe - a klub ma prawdziwych Nowakow.
+
 ## Pomylka w kasie
 
 Wplata wpisana pomylkowo ma dac sie cofnac, a wplata z piatku wpisana

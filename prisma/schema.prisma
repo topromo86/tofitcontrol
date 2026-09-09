@@ -568,6 +568,14 @@ model Session {
   trainerCheckedInAt     DateTime? @db.Timestamptz
   trainerCheckedInUserId String?
 
+  // Właściciel sprawdził alert "brak odbicia prowadzącego" i uznał sprawę za
+  // wyjaśnioną. Sam alert znika wtedy z pulpitu, ale ślad zostaje: bez tego
+  // "zajęcia bez trenera" dałoby się wyciszyć bez śladu, a to jest pytanie
+  // o to, kto realnie pracował.
+  trainerCheckInWaivedAt     DateTime? @db.Timestamptz
+  trainerCheckInWaivedByUserId String?
+  trainerCheckInWaivedNote   String?   @db.Text
+
   // Potwierdzenie obecności przez prowadzącego: liczba osób, którą zatwierdził,
   // i moment zatwierdzenia. Dopóki tego nie ma, lista obecności jest wstępna.
   attendanceConfirmedAt    DateTime? @db.Timestamptz
@@ -1082,6 +1090,7 @@ enum ActivityAction {
   // potwierdzonego zastępstwa. Push do właściciela bywa niedostarczony,
   // a to musi zostawić trwały ślad - patrz lib/services/class-qr.ts.
   TRAINER_CHECKIN_MISMATCH
+  TRAINER_CHECKIN_WAIVED
   // Wgranie i usunięcie danych demonstracyjnych. Obie operacje ruszają bazę
   // klubu hurtowo, więc muszą zostawić ślad z nazwiskiem i godziną.
   DEMO_DATA_LOADED

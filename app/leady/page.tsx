@@ -4,10 +4,10 @@ import { requireLeadAccess } from "@/lib/auth/guard";
 import { LEAD_SOURCE_LABEL, LEAD_STATUS_LABEL, LEAD_STATUS_ORDER } from "@/lib/domain/lead-import";
 import { formatDayTime } from "@/lib/format";
 import { canFetchLeadDetails, isMetaLeadsConfigured } from "@/lib/services/meta-leads";
-import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { importCsvAction } from "./actions";
 import type { LeadStatus } from "@/app/generated/prisma/client";
+import { SubmitButton } from "../submit-button";
 
 const STATUS_STYLE: Record<LeadStatus, string> = {
   NEW: "bg-brand-red/10 text-brand-red",
@@ -99,9 +99,9 @@ export default async function LeadsListPage({
               className="border-line bg-surface-2 mt-2 font-mono text-xs"
             />
           </details>
-          <Button type="submit" size="sm" className="self-start">
+          <SubmitButton pendingLabel="Wczytuję plik..." className="self-start">
             Importuj leady
-          </Button>
+          </SubmitButton>
         </form>
 
         {/* Gniazdo na automatyczny import z Meta Lead Ads (API). Aktywuje się po

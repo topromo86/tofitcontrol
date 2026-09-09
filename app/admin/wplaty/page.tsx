@@ -14,23 +14,34 @@ import { PaymentsList } from "../../payments-list";
 export default async function AdminWplatyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; error?: string; ok?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    error?: string;
+    ok?: string;
+    klient?: string;
+    plan?: string;
+  }>;
 }) {
   await requireRole("ADMIN");
-  const { q, error, ok } = await searchParams;
+  const { q, error, ok, klient, plan } = await searchParams;
 
   const [plans, locations, members] = await Promise.all([
     prisma.plan.findMany({ where: { active: true } }),
     prisma.location.findMany({ orderBy: { name: "asc" } }),
     prisma.member.findMany({
-      where: q
-        ? {
-            OR: [
-              { firstName: { contains: q, mode: "insensitive" } },
-              { lastName: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {},
+      // `klient` przychodzi z kartoteki ("Dodaj karnet" przy nazwisku) i wskazuje
+      // JEDNĄ osobę - dlatego wygrywa z wyszukiwaniem po nazwisku, które potrafi
+      // trafić w kilku Nowaków.
+      where: klient
+        ? { id: klient }
+        : q
+          ? {
+              OR: [
+                { firstName: { contains: q, mode: "insensitive" } },
+                { lastName: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {},
       include: {
         passes: {
           where: { status: { in: ["ACTIVE", "FROZEN"] } },
@@ -85,6 +96,7 @@ export default async function AdminWplatyPage({
         defaultLocationId={locations[0]?.id ?? ""}
         returnTo="/admin/wplaty"
         q={q ?? ""}
+        defaultPlanId={plan}
         now={new Date()}
         mozeWybracDate
       />
