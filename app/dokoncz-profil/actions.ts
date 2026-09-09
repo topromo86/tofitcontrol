@@ -4,7 +4,13 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth/guard";
 import { calculateAge } from "@/lib/domain/booking";
-import { requiresApproval, validateProfile, type ProfileError } from "@/lib/domain/registration";
+import {
+  MINOR_SELF_REGISTER_MESSAGE,
+  requiresApproval,
+  selfRegistrationAllowed,
+  validateProfile,
+  type ProfileError,
+} from "@/lib/domain/registration";
 import { logActivity } from "@/lib/services/activity";
 import type { Sex } from "@/app/generated/prisma/client";
 
@@ -51,6 +57,19 @@ export async function completeProfileAction(
   ]);
   if (!trainer || !location) {
     return { error: "Wybierz lokalizację i trenera z listy." };
+  }
+
+  // Ta sama regula co przy formularzu. Tutaj konto logowania JUZ istnieje
+  // (zalozylo je Google), wiec nie odmawiamy "zaloz konto" - konto jest.
+  // Mowimy, ze to konto staje sie kontem rodzica, a profil dziecka dodaje sie
+  // z niego. Inaczej czlowiek zostawalby z kontem, ktorego nie da sie uzyc,
+  // i z adresem e-mail zajetym na cudza kartoteke.
+  if (!selfRegistrationAllowed(birthDate, now)) {
+    return {
+      error:
+        MINOR_SELF_REGISTER_MESSAGE +
+        " To konto zostaje Twoim kontem - uzupelnij tu wlasne dane, a dziecko dodasz osobno.",
+    };
   }
 
   const isMinor = calculateAge(birthDate, now) < 18;

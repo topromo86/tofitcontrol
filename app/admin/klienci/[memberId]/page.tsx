@@ -16,6 +16,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  attachMinorAction,
+  linkGuardianByEmailAction,
+  unlinkGuardianAction,
   anonymizeMemberAction,
   confirmConsentDeliveryAction,
   markReferralRewardedAction,
@@ -131,6 +134,18 @@ export default async function AdminMemberCardPage({
   // Dzieci podpięte pod TO konto - druga strona powiązania rodzic-dziecko.
   // Osobne zapytanie, bo idzie przez User, a nie przez Member: opiekunem jest
   // konto logowania, nie kartoteka (rodzic może nie mieć własnej kartoteki).
+  // Kartoteki niepelnoletnich bez przypisanego opiekuna - to z nich admin
+  // wybiera przy "Przepisz konto niepelnoletniego". Pobieramy tylko wtedy, gdy
+  // ten klubowicz w ogole ma konto logowania, bo tylko konto moze byc opiekunem.
+  const doPrzepisania = member.userId
+    ? await prisma.member.findMany({
+        where: { isMinor: true, guardianUserId: null, id: { not: member.id } },
+        select: { id: true, firstName: true, lastName: true, birthDate: true },
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        take: 100,
+      })
+    : [];
+
   const dzieci = member.userId
     ? await prisma.member.findMany({
         where: { guardianUserId: member.userId },
@@ -197,7 +212,7 @@ export default async function AdminMemberCardPage({
       {/* Rodzic i dzieci. Na karcie dziecka nie było o rodzicu ani słowa, więc
           numer do niego trzeba było szukać po całej kartotece - a przy dziecku
           to jest pierwsza rzecz, której się szuka. */}
-      {member.guardianUser || dzieci.length > 0 ? (
+      {member.guardianUser || dzieci.length > 0 || member.isMinor || doPrzepisania.length > 0 ? (
         <section className="border-line bg-surface flex flex-col gap-3 rounded-md border p-4">
           {member.guardianUser ? (
             <div>
@@ -237,6 +252,86 @@ export default async function AdminMemberCardPage({
                   Rodzic nie ma własnej kartoteki - konto służy tylko do prowadzenia dziecka.
                 </p>
               )}
+
+              {/* Zmiana rodzica idzie przez odpięcie i przypisanie od nowa -
+                  dwa świadome kroki i dwa wpisy w historii. Powiązanie to dostęp
+                  do danych dziecka, więc nie ma tu cichej podmiany. */}
+              <form
+                action={unlinkGuardianAction}
+                className="mt-3 flex flex-wrap items-center gap-2"
+              >
+                <input type="hidden" name="memberId" value={member.id} />
+                <Input
+                  name="reason"
+                  placeholder="Powód odpięcia (opcjonalnie)"
+                  className="border-line bg-surface-2 h-8 w-56 text-xs"
+                />
+                <Button type="submit" size="sm" variant="ghost">
+                  Odepnij opiekuna
+                </Button>
+              </form>
+            </div>
+          ) : member.isMinor ? (
+            /* Kartoteka dziecka BEZ opiekuna. Po zmianie reguły takie powstają
+               już tylko z ręki klubu (dziecko przyszło na salę, rodzic przyjdzie
+               później), więc muszą być widoczne i łatwe do domknięcia. */
+            <div>
+              <h2 className="text-amber font-mono text-xs tracking-widest uppercase">
+                Brak przypisanego rodzica
+              </h2>
+              <p className="text-muted-brand mt-1 text-sm">
+                To kartoteka osoby niepełnoletniej bez opiekuna. Rodzic musi mieć własne konto w
+                aplikacji - wpisz jego adres logowania, żeby powiązać.
+              </p>
+              <form
+                action={linkGuardianByEmailAction}
+                className="mt-2 flex flex-wrap items-center gap-2"
+              >
+                <input type="hidden" name="memberId" value={member.id} />
+                <Input
+                  name="guardianEmail"
+                  type="email"
+                  placeholder="adres e-mail konta rodzica"
+                  required
+                  className="border-line bg-surface-2 w-64"
+                />
+                <Button type="submit" size="sm">
+                  Przypisz rodzica
+                </Button>
+              </form>
+            </div>
+          ) : null}
+
+          {/* "Przepisz konto niepełnoletniego" - z karty rodzica. Ta sama
+              operacja co wyżej, tylko z drugiej strony: admin siedzi w koncie
+              rodzica i wskazuje dziecko. */}
+          {member.userId && doPrzepisania.length > 0 ? (
+            <div>
+              <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+                Przepisz konto niepełnoletniego
+              </h2>
+              <p className="text-muted-brand mt-1 text-sm">
+                Kartoteki dzieci, które nie mają jeszcze przypisanego rodzica. Wybrane trafi pod to
+                konto i rodzic zobaczy je u siebie w aplikacji.
+              </p>
+              <form action={attachMinorAction} className="mt-2 flex flex-wrap items-center gap-2">
+                <input type="hidden" name="parentMemberId" value={member.id} />
+                <select
+                  name="childMemberId"
+                  required
+                  aria-label="Kartoteka dziecka"
+                  className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+                >
+                  {doPrzepisania.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.firstName} {d.lastName} ({calculateAge(d.birthDate, now)} lat)
+                    </option>
+                  ))}
+                </select>
+                <Button type="submit" size="sm">
+                  Przepisz konto
+                </Button>
+              </form>
             </div>
           ) : null}
 

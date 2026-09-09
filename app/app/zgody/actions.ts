@@ -18,6 +18,27 @@ export async function grantConsentAction(formData: FormData) {
 
   const session = await requireMemberAccess(memberId);
   const consentType = await prisma.consentType.findUniqueOrThrow({ where: { id: consentTypeId } });
+
+  // Zgodę "tylko dla niepełnoletnich" (w praktyce: zgoda opiekuna prawnego)
+  // podpisuje WYŁĄCZNIE konto opiekuna. Bez tego czternastolatek z własnym
+  // loginem sam podpisywał oświadczenie opiekuna prawnego - `requireMemberAccess`
+  // przepuszcza go jako "siebie", więc dostęp był, a podpis nic nie znaczył.
+  if (consentType.forMinorsOnly) {
+    const member = await prisma.member.findUniqueOrThrow({
+      where: { id: memberId },
+      select: { guardianUserId: true, isMinor: true },
+    });
+    if (member.isMinor && member.guardianUserId !== session.user.id) {
+      redirect(
+        `/app/zgody?member=${memberId}&blad=${encodeURIComponent(
+          member.guardianUserId
+            ? "Tę zgodę podpisuje wyłącznie rodzic lub opiekun prawny ze swojego konta."
+            : "Ta kartoteka nie ma jeszcze przypisanego opiekuna - zgłoś to w klubie.",
+        )}`,
+      );
+    }
+  }
+
   const { ipAddress, userAgent } = await clientMeta();
 
   await prisma.consent.create({
@@ -40,10 +61,20 @@ export async function revokeConsentAction(formData: FormData) {
 
   await requireMemberAccess(memberId);
 
-  await prisma.consent.update({
-    where: { id: consentId },
+  // Zgoda musi należeć do TEJ kartoteki. Strażnik sprawdzał dostęp do
+  // `memberId` z formularza, a kasowanie szło po `consentId` - czyli mając
+  // dostęp do własnej kartoteki dało się wycofać cudzą zgodę, podając swoje
+  // `memberId` i czyjeś `consentId`. Warunek w `where` zamyka to w bazie,
+  // a nie w sprawdzeniu, które da się ominąć.
+  const wynik = await prisma.consent.updateMany({
+    where: { id: consentId, memberId },
     data: { revokedAt: new Date() },
   });
+  if (wynik.count === 0) {
+    redirect(
+      `/app/zgody?member=${memberId}&blad=${encodeURIComponent("Nie znaleziono takiej zgody.")}`,
+    );
+  }
 
   redirect(`/app/zgody?member=${memberId}`);
 }

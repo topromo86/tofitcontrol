@@ -810,6 +810,87 @@ Sprzedaje karnet za gotowke, anuluje, probuje anulowac drugi raz, wystawia
 wplate z data sprzed trzech dni, zamyka tamten dzien i sprawdza, ze ani
 anulowanie, ani nocny job juz go nie ruszaja. Tylko baza deweloperska.
 
+## Rodzic i dziecko
+
+**Konto dla osoby niepelnoletniej zaklada RODZIC ze swojego konta.** Dziecko nie
+rejestruje sie samo i nie dostaje wlasnego loginu - jego kartoteka wisi przy
+koncie rodzica (`Member.guardianUserId` wskazuje na `User`, nie na kartoteke,
+wiec rodzic nie musi sam trenowac).
+
+Powod nie jest formalny: to rodzic podpisuje zgody, odbiera powiadomienia
+i odpowiada za dziecko. Konto musi wisiec przy nim od pierwszej chwili, a nie
+byc doczepiane pozniej przez klub.
+
+### Regula stoi w domenie, nie w ekranie
+
+`selfRegistrationAllowed` (`lib/domain/registration.ts`) i wolane jest z OBU
+drog samodzielnego zakladania konta: formularza `/rejestracja` i dokonczenia
+profilu po logowaniu Google (`/dokoncz-profil`). Blokada w jednej zostawialaby
+identyczne wejscie w drugiej.
+
+Przy Google konto logowania juz ISTNIEJE (zalozylo je Google, zanim ktokolwiek
+poznal date urodzenia), wiec nie mowimy "zaloz konto" - mowimy, ze to konto
+staje sie kontem rodzica. Inaczej czlowiek zostawalby z kontem nie do uzycia
+i z adresem e-mail zajetym na cudza kartoteke.
+
+Sciezki KLUBOWE zostaja otwarte: admin dodaje dziecko recznie, bo klub naprawde
+przyjmuje dziecko na sali, zanim przyjdzie rodzic. Taka kartoteka jest widoczna
+na karcie jako "Brak przypisanego rodzica" z polem do powiazania.
+
+### Jedno miejsce, ktore nadaje i zdejmuje opiekuna
+
+`lib/services/guardian.ts` - `linkGuardian` i `unlinkGuardian`. Wczesniej
+`guardianUserId` zapisywalo tylko zatwierdzenie prosby rodzica i nie bylo ZADNEJ
+drogi zmiany ani zdjecia, wiec pomylka byla trwala i naprawialna wylacznie
+recznym UPDATE na bazie klubu.
+
+Trzy warunki, ktorych tamta droga nie sprawdzala:
+
+| warunek | co bez niego |
+| --- | --- |
+| kartoteka nalezy do NIEPELNOLETNIEGO | jedno klikniecie oddaje obcej osobie pelny wglad w kartoteke doroslej klubowiczki |
+| kartoteka nie ma jeszcze opiekuna | cicha podmiana dostepu do danych dziecka |
+| opiekun to nie konto samego dziecka | nastolatek z loginem zostaje swoim opiekunem i podpisuje sobie zgode opiekuna |
+
+Przypisanie **uniewaznia zgode opiekuna podpisana przez kogos innego niz ten
+opiekun** (`revokedAt`, nie kasowanie wiersza) - rodzic zobaczy ja u siebie jako
+do udzielenia. Zmiana rodzica idzie przez odpiecie i przypisanie od nowa: dwa
+swiadome kroki, dwa wpisy w `ActivityLog` (`GUARDIAN_LINKED`/`GUARDIAN_UNLINKED`).
+
+Admin ma obie strony tej samej operacji: na karcie dziecka **"Przypisz rodzica"**
+(po adresie konta), na karcie rodzica **"Przepisz konto niepelnoletniego"**
+(wybor z kartotek bez opiekuna).
+
+### Zgody dziecka
+
+Zgode `forMinorsOnly` (w praktyce: zgoda opiekuna prawnego) podpisuje WYLACZNIE
+konto opiekuna. Wczesniej czternastolatek z wlasnym loginem podpisywal ja sam -
+`requireMemberAccess` przepuszczal go jako "siebie", wiec dostep byl, a podpis
+nic nie znaczyl.
+
+Wycofanie zgody sprawdza teraz, czy zgoda nalezy do TEJ kartoteki
+(`where: { id, memberId }`). Wczesniej straznik sprawdzal dostep do `memberId`
+z formularza, a kasowanie szlo po samym `consentId` - czyli majac dostep do
+wlasnej kartoteki dalo sie wycofac cudza zgode.
+
+### Czego tu jeszcze NIE ma
+
+**18. urodziny.** Dzis powiazanie zostaje na zawsze, a razem z nim pelny wglad
+rodzica w dane doroslego czlowieka, prawo wycofywania jego zgod i drukowania
+jego dokumentow. To jest decyzja prawna, nie techniczna - czeka na
+rozstrzygniecie wlasciciela.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-opiekuna.ts
+```
+
+Przypisuje rodzica, sprawdza uniewaznienie zgody, probuje przypisac opiekuna
+osobie pelnoletniej i drugiego opiekuna bez odpiecia (ma odmowic), odpina
+i przypisuje ponownie. Tylko baza deweloperska.
+
 ## Hasła kadry
 
 Konta trenerów powstały ze wspólnym hasłem tymczasowym wpisanym w skrypcie

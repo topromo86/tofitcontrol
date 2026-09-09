@@ -16,7 +16,7 @@ function formatDate(date: Date): string {
 export default async function ConsentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ member?: string }>;
+  searchParams: Promise<{ member?: string; blad?: string }>;
 }) {
   const params = await searchParams;
   const members = await getAccessibleMembers();
@@ -40,6 +40,11 @@ export default async function ConsentsPage({
 
   return (
     <div className="flex flex-col gap-4">
+      {params.blad ? (
+        <p role="alert" className="border-red/40 bg-red/10 text-red rounded-md border p-3 text-sm">
+          {params.blad}
+        </p>
+      ) : null}
       {members.length > 1 ? (
         <div className="flex gap-2">
           {members.map((m) => (

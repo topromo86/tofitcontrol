@@ -1091,6 +1091,8 @@ enum ActivityAction {
   // a to musi zostawić trwały ślad - patrz lib/services/class-qr.ts.
   TRAINER_CHECKIN_MISMATCH
   TRAINER_CHECKIN_WAIVED
+  GUARDIAN_LINKED
+  GUARDIAN_UNLINKED
   // Wgranie i usunięcie danych demonstracyjnych. Obie operacje ruszają bazę
   // klubu hurtowo, więc muszą zostawić ślad z nazwiskiem i godziną.
   DEMO_DATA_LOADED

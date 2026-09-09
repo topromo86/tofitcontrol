@@ -17,6 +17,24 @@ export function requiresApproval(birthDate: Date, now: Date): boolean {
   return calculateAge(birthDate, now) < SELF_REGISTER_MIN_AGE;
 }
 
+// Czy ta osoba w ogóle może założyć sobie konto SAMA.
+//
+// Nie może, jeśli jest niepełnoletnia: profil dziecka zakłada rodzic ze swojego
+// konta (/app/dziecko). Powód nie jest formalny - to rodzic podpisuje zgody,
+// odbiera powiadomienia i odpowiada za dziecko, więc konto musi od pierwszej
+// chwili wisieć przy nim, a nie być doczepiane później przez klub.
+//
+// Reguła siedzi TUTAJ, a nie w akcji ekranu, bo samodzielne konto powstaje
+// dwiema drogami: formularzem rejestracji i dokończeniem profilu po logowaniu
+// Google. Blokada w jednej zostawiałaby identyczne wejście w drugiej.
+export function selfRegistrationAllowed(birthDate: Date, now: Date): boolean {
+  return calculateAge(birthDate, now) >= SELF_REGISTER_MIN_AGE;
+}
+
+export const MINOR_SELF_REGISTER_MESSAGE =
+  "Konto dla osoby niepełnoletniej zakłada rodzic lub opiekun prawny ze swojego konta. " +
+  "Załóż najpierw konto na siebie, a potem w zakładce „Moje dziecko” dodaj profil dziecka.";
+
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }

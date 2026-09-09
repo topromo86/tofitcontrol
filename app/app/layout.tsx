@@ -59,9 +59,12 @@ export default async function ClientLayout({ children }: { children: React.React
       items: [
         { href: "/app/karnet", label: "Mój karnet" },
         { href: "/app/postepy", label: "Postępy" },
-        ...(session.user.role === "GUARDIAN"
-          ? [{ href: "/app/dziecko", label: "Moje dziecko" }]
-          : []),
+        // Zakładka widoczna dla KAŻDEGO konta klubowicza, nie tylko dla roli
+        // GUARDIAN - aplikacja nigdy nikomu tej roli nie nadaje (rejestracja
+        // zawsze tworzy MEMBER), więc warunek na roli chował ekran przed
+        // wszystkimi. Tu też rodzic zakłada profil dziecka, więc musi tam
+        // trafić, ZANIM jakiekolwiek dziecko istnieje.
+        { href: "/app/dziecko", label: "Moje dziecko" },
         { href: "/app/konto", label: "Konto" },
         { href: "/app/powiadomienia", label: "Powiadomienia" },
         { href: "/app/zgody", label: "Zgody" },

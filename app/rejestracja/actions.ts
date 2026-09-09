@@ -12,6 +12,8 @@ import {
   requiresApproval,
   validateRegistration,
   type RegistrationError,
+  MINOR_SELF_REGISTER_MESSAGE,
+  selfRegistrationAllowed,
 } from "@/lib/domain/registration";
 import { hashPassword } from "@/lib/services/password-reset";
 import { startEmailVerification } from "@/lib/services/email-verification";
@@ -89,6 +91,14 @@ export async function registerAction(
     return {
       error: "Konto z tym adresem już istnieje. Spróbuj się zalogować albo zresetuj hasło.",
     };
+  }
+
+  // Konto dla niepelnoletniego zaklada rodzic ze swojego konta - patrz
+  // selfRegistrationAllowed w lib/domain/registration.ts. Sprawdzamy PO
+  // walidacji formularza, zeby czlowiek nie dostal tego komunikatu przy okazji
+  // literowki w hasle, i PRZED zalozeniem czegokolwiek w bazie.
+  if (!selfRegistrationAllowed(birthDate, now)) {
+    return { error: MINOR_SELF_REGISTER_MESSAGE };
   }
 
   const passwordHash = await hashPassword(password);

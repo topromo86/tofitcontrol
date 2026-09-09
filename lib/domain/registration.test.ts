@@ -3,6 +3,8 @@ import {
   isValidEmail,
   normalizeEmail,
   requiresApproval,
+  selfRegistrationAllowed,
+  MINOR_SELF_REGISTER_MESSAGE,
   SELF_REGISTER_MIN_AGE,
   validatePassword,
   validateProfile,
@@ -159,5 +161,30 @@ describe("validateProfile", () => {
     const exactly = new Date(NOW);
     exactly.setUTCFullYear(exactly.getUTCFullYear() - SELF_REGISTER_MIN_AGE);
     expect(validateProfile(profile({ birthDate: exactly }), NOW)).toBeNull();
+  });
+});
+
+describe("selfRegistrationAllowed", () => {
+  const TERAZ = new Date("2026-09-09T12:00:00Z");
+
+  it("dorosły zakłada konto sam", () => {
+    expect(selfRegistrationAllowed(new Date("2000-01-01"), TERAZ)).toBe(true);
+  });
+
+  it("niepełnoletni nie - profil dziecka zakłada rodzic", () => {
+    expect(selfRegistrationAllowed(new Date("2012-05-20"), TERAZ)).toBe(false);
+  });
+
+  it("w dniu 18. urodzin już wolno", () => {
+    expect(selfRegistrationAllowed(new Date("2008-09-09"), TERAZ)).toBe(true);
+  });
+
+  it("dzień przed osiemnastką jeszcze nie", () => {
+    expect(selfRegistrationAllowed(new Date("2008-09-10"), TERAZ)).toBe(false);
+  });
+
+  it("komunikat mówi, co zrobić, a nie tylko odmawia", () => {
+    expect(MINOR_SELF_REGISTER_MESSAGE).toContain("Załóż najpierw konto na siebie");
+    expect(MINOR_SELF_REGISTER_MESSAGE).toContain("Moje dziecko");
   });
 });
