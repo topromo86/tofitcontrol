@@ -6,6 +6,7 @@ import { computeWeeklyStreak } from "@/lib/domain/progress";
 import { MEMBER_LEVEL_LABEL } from "@/lib/domain/member-level";
 import { todayInTimeZone } from "@/lib/domain/time";
 import { formatDate, formatDayTime } from "@/lib/format";
+import { EXAM_LABEL, EXAM_STYLE, examState } from "@/lib/domain/medical-exam";
 
 const RATING_DELAY_MS = 3_600_000;
 
@@ -109,6 +110,8 @@ export default async function ClientDashboardPage({
   if (pendingRatings > 0)
     todo.push({ label: `Oceń ostatnie zajęcia (${pendingRatings})`, href: "/app" });
 
+  const stanBadan = examState(activeMember.medicalExamValidUntil, new Date());
+
   const shortcuts = [
     { label: "Zapisz się", href: "/app" },
     { label: "Mój karnet", href: "/app/karnet" },
@@ -157,6 +160,39 @@ export default async function ClientDashboardPage({
           </div>
         ))}
       </section>
+
+      {/* Badania zawodnika. Widzi je tylko ten, kto jest oznaczony jako
+          zawodnik - reszcie nic to nie mówi. Termin ustala kadra; tutaj jest
+          wyłącznie do odczytu, bo bierze się z zaświadczenia lekarskiego,
+          które ktoś musiał zobaczyć. */}
+      {activeMember.isCompetitor ? (
+        <section
+          className={`flex flex-col gap-1 rounded-md border p-4 ${
+            stanBadan === "WYGASLO"
+              ? "border-red/40 bg-red/5"
+              : stanBadan === "KONCZY_SIE"
+                ? "border-amber/50 bg-amber/10"
+                : "border-line bg-surface"
+          }`}
+        >
+          <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+            Badania lekarskie do zawodów
+          </h2>
+          <p className={`text-sm ${EXAM_STYLE[stanBadan]}`}>
+            {EXAM_LABEL[stanBadan]}
+            {activeMember.medicalExamValidUntil
+              ? ` - ważne do ${formatDate(activeMember.medicalExamValidUntil)}`
+              : ""}
+          </p>
+          <p className="text-muted-brand text-sm">
+            {stanBadan === "WYGASLO"
+              ? "Bez ważnych badań nie wystartujesz w zawodach. Umów wizytę i podaj nowy termin trenerowi."
+              : stanBadan === "BRAK"
+                ? "Klub nie ma wpisanego terminu Twoich badań. Pokaż zaświadczenie trenerowi."
+                : "Nowy termin wpisuje trener po okazaniu zaświadczenia."}
+          </p>
+        </section>
+      ) : null}
 
       {/* Jak odbić obecność. Krótko i na pulpicie, bo klubowicz nie ma już
           żadnego własnego kodu do pokazania - jedyna droga prowadzi przez kod

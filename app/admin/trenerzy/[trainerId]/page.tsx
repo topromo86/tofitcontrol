@@ -13,8 +13,15 @@ import {
   reactivateTrainerAction,
   toggleLeadAccessAction,
   updateTrainerProfileAction,
+  saveTrainerCompetitorAction,
 } from "../actions";
 import { TrainerAvatar } from "../trainer-avatar";
+import {
+  EXAM_LABEL,
+  EXAM_STYLE,
+  MEDICAL_EXAM_REMINDER_DAYS,
+  examState,
+} from "@/lib/domain/medical-exam";
 
 const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
 
@@ -34,6 +41,8 @@ export default async function TrainerDetailPage({
     include: { user: true, location: true, locations: { orderBy: { name: "asc" } } },
   });
   if (!trainer) notFound();
+
+  const stanBadan = examState(trainer.medicalExamValidUntil, new Date());
 
   const [locations, sessions, members, templates, tasks] = await Promise.all([
     prisma.location.findMany({ orderBy: { name: "asc" } }),
@@ -204,6 +213,57 @@ export default async function TrainerDetailPage({
             Zapisz wizytówkę
           </Button>
         </form>
+      </section>
+
+      {/* Zawodnik i badania - kadra tez startuje w zawodach. */}
+      <section className="border-line bg-surface flex flex-col gap-3 rounded-md border p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+            Zawodnik i badania
+          </h2>
+          {trainer.isCompetitor ? (
+            <span className={`font-mono text-xs ${EXAM_STYLE[stanBadan]}`}>
+              {EXAM_LABEL[stanBadan]}
+              {trainer.medicalExamValidUntil
+                ? ` · do ${formatDate(trainer.medicalExamValidUntil)}`
+                : ""}
+            </span>
+          ) : null}
+        </div>
+        <form action={saveTrainerCompetitorAction} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="trainerId" value={trainer.id} />
+          <label className="text-text flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="isCompetitor"
+              value="tak"
+              defaultChecked={trainer.isCompetitor}
+              className="accent-brand-red size-4"
+            />
+            Zawodnik
+          </label>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="medicalExamValidUntil">Badania ważne do</Label>
+            <Input
+              id="medicalExamValidUntil"
+              name="medicalExamValidUntil"
+              type="date"
+              defaultValue={
+                trainer.medicalExamValidUntil
+                  ? trainer.medicalExamValidUntil.toISOString().slice(0, 10)
+                  : ""
+              }
+              className="border-line bg-surface-2 w-44"
+            />
+          </div>
+          <Button type="submit" size="sm">
+            Zapisz
+          </Button>
+        </form>
+        <p className="text-muted-brand text-xs">
+          Puste pole znaczy „brak badań”. Na {MEDICAL_EXAM_REMINDER_DAYS} dni przed końcem system
+          przypomni zawodnikowi i właścicielowi.
+        </p>
       </section>
 
       <section>

@@ -810,6 +810,61 @@ Sprzedaje karnet za gotowke, anuluje, probuje anulowac drugi raz, wystawia
 wplate z data sprzed trzech dni, zamyka tamten dzien i sprawdza, ze ani
 anulowanie, ani nocny job juz go nie ruszaja. Tylko baza deweloperska.
 
+## Zawodnicy i badania lekarskie
+
+Bez waznych badan zawodnik nie wystartuje, a klub dowiaduje sie o tym zwykle na
+wadze, dzien przed walka. Dlatego termin jest w systemie, widoczny dla zawodnika
+i przypominany z wyprzedzeniem.
+
+**Flaga `isCompetitor` i `medicalExamValidUntil` sa na DWOCH modelach**: `Member`
+i `Trainer`. Kadra tez startuje w zawodach. To swiadome powtorzenie zamiast
+trzeciej tabeli wiazacej: pol sa dwa, a osobny model kosztowalby wiecej niz
+powtorzona petla w nocnym zadaniu.
+
+**Ustawia to kadra, nie zawodnik.** Termin bierze sie z zaswiadczenia
+lekarskiego, ktore ktos musial zobaczyc. Klubowicz: wlasciciel albo trener
+prowadzacy (`requireOwnsMember`). Kadra: wlasciciel. Zawodnik widzi swoj termin
+na pulpicie - do odczytu.
+
+Puste pole daty znaczy "brak badan", a nie "bez zmian" - inaczej nie dalo by sie
+wyczyscic blednego wpisu.
+
+### Kiedy przypominamy
+
+`shouldRemind` (`lib/domain/medical-exam.ts`): przez cale
+`MEDICAL_EXAM_REMINDER_DAYS` (14) dni przed koncem, wlacznie z dniem
+wygasniecia - badania sa wazne do konca tego dnia.
+
+**Okno, nie pojedynczy dzien.** Gdyby warunek brzmial "dokladnie 14 dni przed",
+jedno nieudane uruchomienie nocnego zadania kasowaloby przypomnienie na zawsze.
+Powtorkom zapobiega idempotencja wysylki (`notify` po `subjectId`), a nie waskie
+okno.
+
+Dni liczymy KALENDARZOWO w czasie klubu, nie roznica milisekund: badania wazne
+"do 20 wrzesnia" sa wazne przez caly ten dzien, niezaleznie od godziny.
+
+### Kto dostaje
+
+Zawodnik i wlasciciel. Gdy zawodnikiem jest dziecko bez wlasnego konta,
+przypomnienie idzie do jego **opiekuna** - inaczej nie doszloby do nikogo, kto
+moze umowic wizyte.
+
+Powiadomienie wlascicieli idzie przez `notify`, a **nie** przez `alertAdmins`:
+tamten nie ma idempotencji, a przypominamy przez czternascie nocy z rzedu.
+Wlasciciel dostalby ten sam alert czternascie razy i przestalby na nie patrzec.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-badan-zawodnikow.ts
+```
+
+Sprawdza DOBOR osob (`due`), nie sama wysylke: `notify` zwalnia rezerwacje, gdy
+zaden kanal nie zadziala, a w probie SMTP jest wylaczony. Dlatego zadanie
+raportuje `due` osobno od `athletesNotified` - roznica miedzy nimi jest na
+produkcji jedynym sygnalem, ze poczta padla.
+
 ## Dane kontaktowe konta
 
 **E-mail i telefon sa WYMAGANE przy rejestracji.** Numer siedzi na `User.phone`

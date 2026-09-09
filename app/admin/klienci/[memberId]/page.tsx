@@ -11,11 +11,18 @@ import { formatDate, formatDayTime, formatMoney } from "@/lib/format";
 import { formatPhone } from "@/lib/domain/phone";
 import { cancelPaymentAction, changePaymentDateAction } from "../../finanse/actions";
 import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
+import {
+  EXAM_LABEL,
+  EXAM_STYLE,
+  MEDICAL_EXAM_REMINDER_DAYS,
+  examState,
+} from "@/lib/domain/medical-exam";
 import { addCalendarDays, todayInTimeZone } from "@/lib/domain/time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  saveCompetitorAction,
   attachMinorAction,
   linkGuardianByEmailAction,
   unlinkGuardianAction,
@@ -156,6 +163,7 @@ export default async function AdminMemberCardPage({
 
   const now = new Date();
   const age = calculateAge(member.birthDate, now);
+  const stanBadan = examState(member.medicalExamValidUntil, now);
   const dzisIso = isoDay(todayInTimeZone(now));
   const najwczesniej = isoDay(addCalendarDays(todayInTimeZone(now), -MAX_BACKDATE_DAYS));
 
@@ -451,6 +459,61 @@ export default async function AdminMemberCardPage({
           </details>
         </section>
       ) : null}
+
+      {/* Zawodnik i badania. Bez waznych badan nikt nie wystartuje, a klub
+          dowiaduje sie o tym zwykle na wadze, dzien przed walka - dlatego
+          termin jest tutaj, a nie w czyimś zeszycie. Ustawia kadra; zawodnik
+          widzi to u siebie w aplikacji. */}
+      <section className="border-line bg-surface flex flex-col gap-3 rounded-md border p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+            Zawodnik i badania
+          </h2>
+          {member.isCompetitor ? (
+            <span className={`font-mono text-xs ${EXAM_STYLE[stanBadan]}`}>
+              {EXAM_LABEL[stanBadan]}
+              {member.medicalExamValidUntil
+                ? ` · do ${formatDate(member.medicalExamValidUntil)}`
+                : ""}
+            </span>
+          ) : null}
+        </div>
+
+        <form action={saveCompetitorAction} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="memberId" value={member.id} />
+          <label className="text-text flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="isCompetitor"
+              value="tak"
+              defaultChecked={member.isCompetitor}
+              className="accent-brand-red size-4"
+            />
+            Zawodnik
+          </label>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="medicalExamValidUntil">Badania ważne do</Label>
+            <Input
+              id="medicalExamValidUntil"
+              name="medicalExamValidUntil"
+              type="date"
+              defaultValue={
+                member.medicalExamValidUntil
+                  ? member.medicalExamValidUntil.toISOString().slice(0, 10)
+                  : ""
+              }
+              className="border-line bg-surface-2 w-44"
+            />
+          </div>
+          <Button type="submit" size="sm">
+            Zapisz
+          </Button>
+        </form>
+        <p className="text-muted-brand text-xs">
+          Puste pole znaczy „brak badań”. Na {MEDICAL_EXAM_REMINDER_DAYS} dni przed końcem system
+          przypomni zawodnikowi i właścicielowi.
+        </p>
+      </section>
 
       <section>
         <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">

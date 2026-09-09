@@ -6,7 +6,7 @@
 // do całej reszty. Dodając nowy typ, dodaj najpierw nadawcę.
 
 export type NotificationType =
-  "BOOKING_CONFIRMATION" | "SESSION_REMINDER" | "BOOKING_SUGGESTION" | "CHECK_IN";
+  "BOOKING_CONFIRMATION" | "SESSION_REMINDER" | "BOOKING_SUGGESTION" | "CHECK_IN" | "MEDICAL_EXAM";
 
 // PUSH i EMAIL są kanałami samodzielnymi - zaznaczone dostajesz zawsze.
 // SMS jest wyłącznie zapasowy (wysyłany, gdy pozostałe zawiodą), bo kosztuje
@@ -59,6 +59,18 @@ export const NOTIFICATION_TYPES: readonly NotificationMeta[] = [
     description: "Gdy Twój stały termin jest wolny, a nie masz na niego zapisu - podpowiemy.",
     defaultPush: false,
     defaultEmail: false,
+    guardianOnly: false,
+    emailSupported: true,
+  },
+  {
+    type: "MEDICAL_EXAM",
+    label: "Badania lekarskie do zawodów",
+    description:
+      "Na dwa tygodnie przed końcem ważności badań przypomnimy, żeby umówić nowe. Dotyczy zawodników.",
+    // Domyślnie oba kanały: bez ważnych badań zawodnik nie wystartuje, więc to
+    // nie jest zachęta, tylko informacja, po którą sam by przyszedł.
+    defaultPush: true,
+    defaultEmail: true,
     guardianOnly: false,
     emailSupported: true,
   },

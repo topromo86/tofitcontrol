@@ -52,11 +52,17 @@ describe("wantsNotification", () => {
 describe("parsePreferenceForm", () => {
   it("niezaznaczone typy zapisują się jako wyłączone", () => {
     const result = parsePreferenceForm(["SESSION_REMINDER:PUSH"], false);
-    expect(result).toEqual([
-      { type: "BOOKING_CONFIRMATION", push: false, email: false, sms: false },
-      { type: "SESSION_REMINDER", push: true, email: false, sms: false },
-      { type: "BOOKING_SUGGESTION", push: false, email: false, sms: false },
-    ]);
+    // Bez wypisywania listy typow na sztywno: dodanie nowego powiadomienia nie
+    // ma wywracac testu o tym, ze NIEZAZNACZONE zapisuja sie jako wylaczone.
+    expect(result.find((r) => r.type === "SESSION_REMINDER")).toEqual({
+      type: "SESSION_REMINDER",
+      push: true,
+      email: false,
+      sms: false,
+    });
+    for (const r of result.filter((x) => x.type !== "SESSION_REMINDER")) {
+      expect(r).toEqual({ type: r.type, push: false, email: false, sms: false });
+    }
   });
 
   it("obsługuje oba kanały naraz", () => {

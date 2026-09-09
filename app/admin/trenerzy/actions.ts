@@ -421,3 +421,61 @@ export async function toggleLeadAccessAction(formData: FormData) {
   revalidatePath(`/admin/trenerzy/${trainerId}`);
   backToTrainer(trainerId);
 }
+
+// Zawodnik i badania po stronie kadry - trener tez startuje w zawodach.
+// Ta sama regula co przy klubowiczu (lib/domain/medical-exam.ts), inny model.
+export async function saveTrainerCompetitorAction(formData: FormData) {
+  const session = await requireRole("ADMIN");
+  const trainerId = String(formData.get("trainerId") ?? "");
+  const isCompetitor = formData.get("isCompetitor") === "tak";
+  const raw = String(formData.get("medicalExamValidUntil") ?? "").trim();
+
+  const wroc = (params: string) => redirect(`/admin/trenerzy/${trainerId}?${params}`);
+
+  let validUntil: Date | null = null;
+  if (raw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      wroc(`blad=${encodeURIComponent("Podaj poprawną datę ważności badań.")}`);
+    }
+    validUntil = new Date(`${raw}T00:00:00.000Z`);
+    if (Number.isNaN(validUntil.getTime())) {
+      wroc(`blad=${encodeURIComponent("Podaj poprawną datę ważności badań.")}`);
+    }
+  }
+
+  const przed = await prisma.trainer.findUniqueOrThrow({
+    where: { id: trainerId },
+    select: {
+      isCompetitor: true,
+      medicalExamValidUntil: true,
+      user: { select: { name: true } },
+    },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.trainer.update({
+      where: { id: trainerId },
+      data: { isCompetitor, medicalExamValidUntil: validUntil },
+    });
+
+    const bylo = przed.medicalExamValidUntil?.toISOString().slice(0, 10) ?? "brak";
+    const jest = validUntil?.toISOString().slice(0, 10) ?? "brak";
+    if (przed.isCompetitor !== isCompetitor) {
+      await logActivity(tx, {
+        actorUserId: session.user.id,
+        action: "COMPETITOR_CHANGED",
+        summary: `${przed.user.name} (kadra): ${isCompetitor ? "oznaczony jako zawodnik" : "zdjęto oznaczenie zawodnika"}`,
+      });
+    }
+    if (bylo !== jest) {
+      await logActivity(tx, {
+        actorUserId: session.user.id,
+        action: "MEDICAL_EXAM_SET",
+        summary: `${przed.user.name} (kadra): badania ważne do ${jest} (było: ${bylo})`,
+      });
+    }
+  });
+
+  revalidatePath(`/admin/trenerzy/${trainerId}`);
+  wroc(`info=${encodeURIComponent("Zapisano dane zawodnika.")}`);
+}

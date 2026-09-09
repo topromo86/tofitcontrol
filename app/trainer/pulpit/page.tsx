@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireTrainerSelf } from "@/lib/auth/guard";
 import { seesSessionWhere } from "@/lib/domain/substitute";
 import { addCalendarDays, todayInTimeZone, zonedTimeToUtc } from "@/lib/domain/time";
+import { EXAM_LABEL, EXAM_STYLE, examState } from "@/lib/domain/medical-exam";
+import { formatDate } from "@/lib/format";
 
 // Pulpit trenera - ekran startowy po zalogowaniu. Skrót dnia i tego, co wymaga
 // jego reakcji (zastępstwa, alerty). Odhaczanie obecności zostaje na ekranie
@@ -27,6 +29,7 @@ function time(date: Date): string {
 
 export default async function TrainerDashboardPage() {
   const { session, trainer } = await requireTrainerSelf();
+  const stanBadan = examState(trainer.medicalExamValidUntil, new Date());
   const now = new Date();
   const today = todayInTimeZone(now);
   const tomorrow = addCalendarDays(today, 1);
@@ -88,6 +91,33 @@ export default async function TrainerDashboardPage() {
         </h1>
         <p className="text-muted-brand mt-1 text-sm capitalize">{fullDate(now)}</p>
       </div>
+
+      {/* Badania - widoczne tylko dla trenera oznaczonego jako zawodnik.
+          Kadra tez startuje w zawodach i tez traci prawo startu bez badan. */}
+      {trainer.isCompetitor ? (
+        <section
+          className={`flex flex-col gap-1 rounded-md border p-4 ${
+            stanBadan === "WYGASLO"
+              ? "border-red/40 bg-red/5"
+              : stanBadan === "KONCZY_SIE"
+                ? "border-amber/50 bg-amber/10"
+                : "border-line bg-surface"
+          }`}
+        >
+          <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+            Twoje badania do zawodów
+          </h2>
+          <p className={`text-sm ${EXAM_STYLE[stanBadan]}`}>
+            {EXAM_LABEL[stanBadan]}
+            {trainer.medicalExamValidUntil
+              ? ` - ważne do ${formatDate(trainer.medicalExamValidUntil)}`
+              : ""}
+          </p>
+          <p className="text-muted-brand text-sm">
+            Nowy termin wpisuje właściciel po okazaniu zaświadczenia.
+          </p>
+        </section>
+      ) : null}
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map((k) => (

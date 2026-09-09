@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth/guard";
+import { requireOwnsMember, requireRole } from "@/lib/auth/guard";
 import { calculateAge } from "@/lib/domain/booking";
 import { isValidEmail, normalizeEmail } from "@/lib/domain/registration";
 import { logActivity } from "@/lib/services/activity";
@@ -323,4 +323,67 @@ export async function unlinkGuardianAction(formData: FormData) {
         : `blad=${encodeURIComponent(wynik.message)}`
     }`,
   );
+}
+// Zawodnik i termin badan lekarskich.
+//
+// Ustawia to KADRA (wlasciciel albo trener prowadzacy), nie sam zawodnik -
+// termin bierze sie z zaswiadczenia lekarskiego, ktore ktos musial zobaczyc.
+// Zawodnik widzi go u siebie, ale nie zmienia.
+//
+// Pusta data znaczy "nie mam", a nie "bez zmian" - inaczej nie dalo by sie
+// wyczyscic bledacego wpisu.
+export async function saveCompetitorAction(formData: FormData) {
+  const memberId = String(formData.get("memberId"));
+  // ADMIN wszedzie, trener wylacznie u swoich podopiecznych - ten sam straznik,
+  // co przy reszcie kartoteki.
+  const session = await requireOwnsMember(memberId);
+
+  const isCompetitor = formData.get("isCompetitor") === "tak";
+  const raw = String(formData.get("medicalExamValidUntil") ?? "").trim();
+
+  const wroc = (params: string) => redirect(`/admin/klienci/${memberId}?${params}`);
+  let validUntil: Date | null = null;
+  if (raw) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!m) wroc(`blad=${encodeURIComponent("Podaj poprawną datę ważności badań.")}`);
+    validUntil = new Date(`${raw}T00:00:00.000Z`);
+    if (Number.isNaN(validUntil.getTime())) {
+      wroc(`blad=${encodeURIComponent("Podaj poprawną datę ważności badań.")}`);
+    }
+  }
+
+  const przed = await prisma.member.findUniqueOrThrow({
+    where: { id: memberId },
+    select: { firstName: true, lastName: true, isCompetitor: true, medicalExamValidUntil: true },
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.member.update({
+      where: { id: memberId },
+      data: { isCompetitor, medicalExamValidUntil: validUntil },
+    });
+
+    const kto = `${przed.firstName} ${przed.lastName}`;
+    if (przed.isCompetitor !== isCompetitor) {
+      await logActivity(tx, {
+        actorUserId: session.user.id,
+        action: "COMPETITOR_CHANGED",
+        memberId,
+        summary: `${kto}: ${isCompetitor ? "oznaczony jako zawodnik" : "zdjęto oznaczenie zawodnika"}`,
+      });
+    }
+    const bylo = przed.medicalExamValidUntil?.toISOString().slice(0, 10) ?? "brak";
+    const jest = validUntil?.toISOString().slice(0, 10) ?? "brak";
+    if (bylo !== jest) {
+      await logActivity(tx, {
+        actorUserId: session.user.id,
+        action: "MEDICAL_EXAM_SET",
+        memberId,
+        summary: `${kto}: badania ważne do ${jest} (było: ${bylo})`,
+      });
+    }
+  });
+
+  revalidatePath(`/admin/klienci/${memberId}`);
+  wroc(`info=${encodeURIComponent("Zapisano dane zawodnika.")}`);
 }

@@ -164,6 +164,10 @@ model Trainer {
   photo         Bytes?
   photoMimeType String?
 
+  // To samo co przy klubowiczu - trener tez bywa zawodnikiem.
+  isCompetitor          Boolean   @default(false)
+  medicalExamValidUntil DateTime? @db.Date
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -253,6 +257,11 @@ model Member {
   churnedAt                  DateTime?      @db.Timestamptz
   sparringClearedAt          DateTime?      @db.Timestamptz
   sparringClearedByTrainerId String?
+
+  // Zawodnik startujacy w zawodach. Flage nadaje wlasciciel; termin badan
+  // wpisuje kadra. Data, nie moment - badania sa wazne "do dnia".
+  isCompetitor            Boolean   @default(false)
+  medicalExamValidUntil   DateTime? @db.Date
   // Kartoteka z danych demonstracyjnych. Widać to na liście klubowiczów, żeby
   // nikt nie wziął demonstracyjnego Kowalskiego za klienta klubu.
   isDemo                     Boolean        @default(false)
@@ -1093,6 +1102,8 @@ enum ActivityAction {
   TRAINER_CHECKIN_WAIVED
   GUARDIAN_LINKED
   GUARDIAN_UNLINKED
+  COMPETITOR_CHANGED
+  MEDICAL_EXAM_SET
   // Wgranie i usunięcie danych demonstracyjnych. Obie operacje ruszają bazę
   // klubu hurtowo, więc muszą zostawić ślad z nazwiskiem i godziną.
   DEMO_DATA_LOADED
@@ -1149,6 +1160,7 @@ model PasswordResetToken {
 // ---------------------------------------------------------------------------
 
 enum NotificationType {
+  MEDICAL_EXAM
   BOOKING_CONFIRMATION
   SESSION_REMINDER
   BOOKING_SUGGESTION
