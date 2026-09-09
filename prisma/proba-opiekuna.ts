@@ -26,6 +26,7 @@ delete process.env.SMTP_PASSWORD;
 
 import { prisma } from "@/lib/prisma";
 import { linkGuardian, unlinkGuardian } from "@/lib/services/guardian";
+import { recalcMinorStatus } from "@/lib/jobs/recalc-minor-status";
 
 let bledy = 0;
 function sprawdz(opis: string, warunek: boolean, szczegol = "") {
@@ -202,6 +203,52 @@ async function main() {
       actorUserId: admin.id,
     });
     sprawdz("przypisanie po odpięciu działa", ponownie.ok);
+
+    console.log("\n=== 5. Powiazanie wygasa w 18. urodziny ===");
+    // Data urodzenia dokladnie 18 lat temu: dzis konczy 18 lat.
+    const osiemnastka = new Date();
+    osiemnastka.setFullYear(osiemnastka.getFullYear() - 18);
+    const prawieDorosly = await prisma.member.create({
+      data: {
+        firstName: "Próba",
+        lastName: "Osiemnastka",
+        birthDate: osiemnastka,
+        isMinor: true,
+        ownerTrainerId: trener.id,
+        homeLocationId: sala.id,
+        guardianUserId: rodzic.id,
+      },
+      select: { id: true },
+    });
+    kartoteki.push(prawieDorosly.id);
+
+    const wynikJoba = await recalcMinorStatus(prisma);
+    const poUrodzinach = await prisma.member.findUniqueOrThrow({
+      where: { id: prawieDorosly.id },
+      select: { isMinor: true, guardianUserId: true },
+    });
+    sprawdz("status pelnoletnosci przeliczony", poUrodzinach.isMinor === false);
+    sprawdz(
+      "powiazanie z rodzicem WYGASLO",
+      poUrodzinach.guardianUserId === null,
+      poUrodzinach.guardianUserId ?? "",
+    );
+    sprawdz("job zaraportowal wygasniecie", wynikJoba.expiredGuardianships >= 1);
+    const sladWygasniecia = await prisma.activityLog.count({
+      where: { memberId: prawieDorosly.id, action: "GUARDIAN_UNLINKED" },
+    });
+    sprawdz("zostal slad w historii", sladWygasniecia === 1, String(sladWygasniecia));
+
+    // Powrotu nie ma: przypisanie dziala wylacznie dla niepelnoletnich.
+    const proba = await linkGuardian({
+      memberId: prawieDorosly.id,
+      guardianUserId: rodzic.id,
+      actorUserId: admin.id,
+    });
+    sprawdz(
+      "po 18. urodzinach nie da sie przypisac opiekuna z powrotem",
+      !proba.ok && proba.reason === "PELNOLETNI",
+    );
   } finally {
     await prisma.activityLog.deleteMany({ where: { memberId: { in: kartoteki } } });
     await prisma.consent.deleteMany({ where: { memberId: { in: kartoteki } } });

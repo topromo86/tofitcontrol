@@ -873,12 +873,25 @@ Wycofanie zgody sprawdza teraz, czy zgoda nalezy do TEJ kartoteki
 z formularza, a kasowanie szlo po samym `consentId` - czyli majac dostep do
 wlasnej kartoteki dalo sie wycofac cudza zgode.
 
-### Czego tu jeszcze NIE ma
+### 18. urodziny: powiazanie WYGASA
 
-**18. urodziny.** Dzis powiazanie zostaje na zawsze, a razem z nim pelny wglad
-rodzica w dane doroslego czlowieka, prawo wycofywania jego zgod i drukowania
-jego dokumentow. To jest decyzja prawna, nie techniczna - czeka na
-rozstrzygniecie wlasciciela.
+Nocne zadanie `recalc-minor-status` przelicza `isMinor` po 18. urodzinach
+i **zdejmuje wtedy `guardianUserId`**.
+
+Powod jest prawny, nie techniczny. Powiazanie daje rodzicowi pelny wglad
+w kartoteke, prawo wycofywania zgod i drukowania dokumentow. Wobec osoby
+doroslej to juz nie jest opieka nad dzieckiem, tylko dostep do cudzych danych -
+i nie ma podstawy, zeby trwal dalej bez zgody tej osoby.
+
+**Powrotu nie ma.** `linkGuardian` dziala wylacznie dla niepelnoletnich, wiec po
+18. urodzinach nikt - takze admin - nie przypnie tego konta z powrotem.
+
+Rodzic dostaje o tym e-mail. Nie idzie to przez `notify`, bo tamta droga szanuje
+preferencje powiadomien, a utrata dostepu do danych dziecka nie jest czyms,
+z czego sie rezygnuje w ustawieniach.
+
+Gdy dziecko nie mialo wlasnego konta, wpis w historii mowi to wprost: klub ma
+zalozyc mu login, bo inaczej pelnoletnia juz osoba nie zaloguje sie do niczego.
 
 ### Sprawdzenie
 
