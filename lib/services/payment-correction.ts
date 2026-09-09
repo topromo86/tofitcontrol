@@ -7,6 +7,7 @@ import {
   CANCEL_MESSAGE,
   PAYMENT_DATE_MESSAGE,
   planCancellation,
+  planPassShift,
   resolvePaymentDate,
   type CancelError,
 } from "@/lib/domain/payment-correction";
@@ -194,7 +195,8 @@ export async function cancelPayment(input: {
 // nieprawdę.
 
 export type ChangeDateResult =
-  { ok: false; message: string } | { ok: true; z: Date; na: Date; korekt: number };
+  | { ok: false; message: string }
+  | { ok: true; z: Date; na: Date; korekt: number; karnetDo: Date | null };
 
 export async function changePaymentDate(input: {
   paymentId: string;
@@ -207,6 +209,16 @@ export async function changePaymentDate(input: {
     include: {
       member: { select: { firstName: true, lastName: true } },
       corrections: { select: { id: true } },
+      pass: {
+        select: {
+          id: true,
+          startsAt: true,
+          plan: { select: { durationDays: true, name: true } },
+          // Ważność przesuwamy tylko za PIERWSZĄ wpłatą karnetu. Dopłata do
+          // zaległości nie jest momentem sprzedaży i nie ma prawa ruszać dat.
+          payments: { orderBy: { recordedAt: "asc" }, take: 1, select: { id: true } },
+        },
+      },
     },
   });
 
@@ -244,11 +256,32 @@ export async function changePaymentDate(input: {
     }
   }
 
+  // Karnet jest ważny N dni OD SPRZEDAŻY, więc przy przesunięciu wpłaty
+  // ważność musi pójść razem z nią - inaczej klient traci albo zyskuje dni
+  // w zależności od tego, kiedy właściciel zdążył wpisać pieniądze.
+  const pierwszaWplataKarnetu = payment.pass?.payments[0]?.id === payment.id;
+  const przesuniecie =
+    payment.pass && pierwszaWplataKarnetu
+      ? planPassShift({
+          passStartsAt: payment.pass.startsAt,
+          paymentRecordedAt: payment.recordedAt,
+          newRecordedAt: wybrana.at,
+          durationDays: payment.pass.plan.durationDays,
+        })
+      : null;
+
   await prisma.$transaction(async (tx) => {
     await tx.payment.update({
       where: { id: payment.id },
       data: { recordedAt: wybrana.at },
     });
+
+    if (przesuniecie?.move && payment.pass) {
+      await tx.pass.update({
+        where: { id: payment.pass.id },
+        data: { startsAt: przesuniecie.startsAt, endsAt: przesuniecie.endsAt },
+      });
+    }
     // Korekty idą za oryginałem - inaczej kwoty rozjechałyby się na dwóch dniach.
     if (payment.corrections.length > 0) {
       await tx.payment.updateMany({
@@ -270,7 +303,10 @@ export async function changePaymentDate(input: {
         `Zmieniono datę wpłaty ${formatMoney(payment.amountGross)} ` +
         `(${payment.member.firstName} ${payment.member.lastName}): ` +
         `${payment.recordedAt.toISOString().slice(0, 10)} -> ${wybrana.at.toISOString().slice(0, 10)}` +
-        (payment.corrections.length > 0 ? ` (z ${payment.corrections.length} korektami)` : ""),
+        (payment.corrections.length > 0 ? ` (z ${payment.corrections.length} korektami)` : "") +
+        (przesuniecie?.move
+          ? `; karnet "${payment.pass!.plan.name}" ważny do ${przesuniecie.endsAt.toISOString().slice(0, 10)}`
+          : ""),
     });
   });
 
@@ -279,5 +315,6 @@ export async function changePaymentDate(input: {
     z: payment.recordedAt,
     na: wybrana.at,
     korekt: payment.corrections.length,
+    karnetDo: przesuniecie?.move ? przesuniecie.endsAt : null,
   };
 }

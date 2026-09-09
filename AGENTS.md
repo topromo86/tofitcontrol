@@ -748,6 +748,25 @@ Samej korekty nie da sie przeniesc osobno.
 `createdAt` zostaje nietkniete - to jedyny slad, kiedy wiersz naprawde powstal,
 i to on odroznia poprawiona pomylke od gotowki dosypanej wstecz.
 
+**Waznosc karnetu idzie razem z data.** Karnet jest wazny N dni OD SPRZEDAZY,
+a nie od chwili wpisania do systemu - gdy wlasciciel wpisuje w sobote pieniadze
+wziete w piatek, karnet ma biec od piatku, inaczej klient dostaje dzien mniej
+za te same pieniadze. Dotyczy to obu drog: sprzedazy z data wsteczna
+(`sellPass` liczy `startsAt` od `recordedAt`) i pozniejszej zmiany daty
+(`planPassShift` w `lib/domain/payment-correction.ts`).
+
+Jest jeden przypadek, w ktorym karnetu ruszac NIE WOLNO: gdy klient mial jeszcze
+wazny karnet, nowy startuje od `endsAt` starego, a nie od sprzedazy (SPEC.md
+sekcja 2: "inaczej okradasz klienta z dni"). Taki karnet stoi w kolejce i data
+wplaty nie ma z jego waznoscia nic wspolnego - przesuniecie nalozyloby dwa
+karnety na siebie. Rozpoznajemy to po tym, czy karnet zaczyna sie w TYM SAMYM
+DNIU co wplata. Waznosc przesuwa tez wylacznie PIERWSZA wplata karnetu - doplata
+do zaleglosci nie jest momentem sprzedazy.
+
+Naprawa karnetow sprzedanych, zanim to dzialalo:
+`npx tsx prisma/porzadki-wplat.ts --env .env.vercel --napraw-waznosc` (podglad,
+z `--usun` wykonanie). Pomija karnety stojace w kolejce.
+
 ### Dzien kasowy jest nietykalny po zamknieciu
 
 `closeCashDay` przelicza `expectedGross` **wylacznie dla dni z `closedAt: null`**.

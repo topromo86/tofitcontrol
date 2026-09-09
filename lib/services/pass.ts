@@ -189,12 +189,17 @@ export async function sellPass(
     );
   }
 
+  // Karnet jest ważny N dni OD SPRZEDAŻY, a nie od chwili wpisania do systemu.
+  // Gdy właściciel wpisuje w sobotę pieniądze wzięte w piątek, karnet ma biec
+  // od piątku - inaczej klient dostaje dzień mniej za te same pieniądze.
+  const dzienSprzedazy = params.recordedAt ?? params.now;
+
   // Jeśli klient ma jeszcze aktywny karnet - nowy startuje od endsAt starego,
   // nie od dziś (SPEC.md sekcja 2: "inaczej okradasz klienta z dni").
   const startsAt =
-    currentActivePass && currentActivePass.endsAt > params.now
+    currentActivePass && currentActivePass.endsAt > dzienSprzedazy
       ? currentActivePass.endsAt
-      : params.now;
+      : dzienSprzedazy;
   const endsAt = new Date(startsAt.getTime() + plan.durationDays * 86_400_000);
 
   const pass = await tx.pass.create({

@@ -111,3 +111,44 @@ export function planCancellation(input: {
   }
   return { ok: true, deltaGross: -saldo };
 }
+
+// Czy przeniesienie daty wpłaty ma przesunąć też ważność karnetu.
+//
+// Karnet jest ważny N dni OD SPRZEDAŻY, więc gdy wpłata przenosi się o dwa dni
+// wstecz, ważność musi pójść razem z nią - inaczej klient traci albo zyskuje
+// dni, w zależności od tego, kiedy właściciel zdążył wpisać pieniądze.
+//
+// Jest jednak przypadek, w którym karnetu ruszać NIE WOLNO: gdy klient miał
+// jeszcze ważny karnet, nowy startuje od `endsAt` starego, a nie od sprzedaży
+// (SPEC.md sekcja 2: "inaczej okradasz klienta z dni"). Taki karnet stoi
+// w kolejce i data wpłaty nie ma z jego ważnością nic wspólnego - przesunięcie
+// go nałożyłoby dwa karnety na siebie.
+//
+// Rozpoznajemy to po tym, czy karnet zaczyna się w TYM SAMYM DNIU co wpłata.
+// Dzień, nie moment: sprzedaż zapisuje sekundy, a data wsteczna ląduje
+// w południe, więc porównanie co do milisekundy nie trafiłoby nigdy.
+export type PassShift =
+  { move: false; reason: "KOLEJKOWANY" } | { move: true; startsAt: Date; endsAt: Date };
+
+export function planPassShift(input: {
+  passStartsAt: Date;
+  paymentRecordedAt: Date;
+  newRecordedAt: Date;
+  durationDays: number;
+}): PassShift {
+  const dzienKarnetu = todayInTimeZone(input.passStartsAt);
+  const dzienWplaty = todayInTimeZone(input.paymentRecordedAt);
+  const tenSamDzien =
+    dzienKarnetu.year === dzienWplaty.year &&
+    dzienKarnetu.month === dzienWplaty.month &&
+    dzienKarnetu.day === dzienWplaty.day;
+
+  if (!tenSamDzien) return { move: false, reason: "KOLEJKOWANY" };
+
+  const startsAt = input.newRecordedAt;
+  return {
+    move: true,
+    startsAt,
+    endsAt: new Date(startsAt.getTime() + input.durationDays * 86_400_000),
+  };
+}

@@ -41,6 +41,10 @@ const envFile = args("--env")[0] ?? ".env";
 const klienci = args("--klient");
 const zostawIds = args("--zostaw");
 const wykonaj = process.argv.includes("--usun");
+const usunKarnety = process.argv.includes("--usun-osierocone-karnety");
+const trybKarnety = process.argv.includes("--karnety-bez-wplat");
+const trybWaznosc = process.argv.includes("--napraw-waznosc");
+const karnetIds = args("--karnet");
 
 if (!existsSync(envFile)) {
   console.error(`Nie znaleziono pliku z adresem bazy: ${envFile}`);
@@ -56,6 +60,121 @@ const dzien = (d: Date) => d.toISOString().slice(0, 10);
 
 async function main() {
   console.log(`Baza: ${connectionString.replace(/:\/\/[^@]*@/, "://***@")} (z ${envFile})\n`);
+
+  // Tryb osobny: karnet biegnie od DATY SPRZEDAZY, a nie od dnia wpisania.
+  //
+  // Naprawa dla karnetow sprzedanych, zanim system umial przesuwac waznosc
+  // razem z data wplaty - albo takich, ktore stały w kolejce za karnetem
+  // pozniej skasowanym i zostały z data startu wzieta z powietrza.
+  //
+  // NIE rusza karnetu, ktory legalnie stoi w kolejce za innym karnetem tego
+  // samego klienta (SPEC.md sekcja 2: nowy startuje od konca starego, zeby nie
+  // okradac klienta z dni). Rozpoznajemy to po tym, czy jakis inny karnet tej
+  // osoby konczy sie dokladnie wtedy, gdy ten sie zaczyna.
+  if (trybWaznosc) {
+    const karnety = await prisma.pass.findMany({
+      include: {
+        member: { select: { id: true, firstName: true, lastName: true } },
+        plan: { select: { name: true, durationDays: true } },
+        payments: { orderBy: { recordedAt: "asc" }, take: 1 },
+      },
+      orderBy: { startsAt: "asc" },
+    });
+
+    const doPoprawy: { id: string; opis: string; startsAt: Date; endsAt: Date }[] = [];
+    for (const k of karnety) {
+      const pierwsza = k.payments[0];
+      if (!pierwsza) continue;
+
+      const poprzednik = karnety.some(
+        (inny) =>
+          inny.id !== k.id &&
+          inny.memberId === k.memberId &&
+          inny.endsAt.getTime() === k.startsAt.getTime(),
+      );
+      if (poprzednik) continue;
+
+      if (dzien(k.startsAt) === dzien(pierwsza.recordedAt)) continue;
+
+      const startsAt = pierwsza.recordedAt;
+      const endsAt = new Date(startsAt.getTime() + k.plan.durationDays * 86_400_000);
+      doPoprawy.push({
+        id: k.id,
+        startsAt,
+        endsAt,
+        opis:
+          `${k.member.firstName} ${k.member.lastName} · "${k.plan.name}" · wplata ${dzien(pierwsza.recordedAt)}` +
+          ` · bylo ${dzien(k.startsAt)}-${dzien(k.endsAt)} -> ma byc ${dzien(startsAt)}-${dzien(endsAt)}`,
+      });
+    }
+
+    console.log(`Karnetow z waznoscia niezgodna z data wplaty: ${doPoprawy.length}\n`);
+    for (const k of doPoprawy) console.log(`  ${k.opis}`);
+
+    if (!wykonaj) {
+      console.log(`\nTo byla proba na sucho - nic nie zostalo zmienione. Uruchom z --usun.`);
+      return;
+    }
+    for (const k of doPoprawy) {
+      await prisma.pass.update({
+        where: { id: k.id },
+        data: { startsAt: k.startsAt, endsAt: k.endsAt },
+      });
+    }
+    console.log(`\nPoprawiono karnetow: ${doPoprawy.length}.`);
+    return;
+  }
+
+  // Tryb osobny: karnety, na ktorych nie wisi ANI JEDNA wplata.
+  //
+  // Powstaja na dwa sposoby i tylko jeden z nich jest smieciem:
+  //   - po skasowaniu wplaty (`Payment.passId` jest SetNull, wiec karnet
+  //     zostaje) - wtedy kartoteka pokazuje kilka karnetow oplaconych jedna
+  //     wplata,
+  //   - albo legalnie: "karnet na potem" sprzedany z zerowa zaliczka; sellPass
+  //     swiadomie nie tworzy wtedy wpisu w kasie.
+  // Dlatego skrypt ich NIE kasuje hurtem - wypisuje i czeka na wskazanie
+  // konkretnych przez --karnet <id>.
+  if (trybKarnety) {
+    const bezWplat = await prisma.pass.findMany({
+      where: { payments: { none: {} } },
+      include: {
+        member: { select: { firstName: true, lastName: true } },
+        plan: { select: { name: true } },
+      },
+      orderBy: { startsAt: "desc" },
+    });
+    console.log(`Karnetow bez ani jednej wplaty: ${bezWplat.length}\n`);
+    for (const k of bezWplat) {
+      console.log(
+        `  ${k.id}  ${dzien(k.startsAt)}-${dzien(k.endsAt)}  ${zl(k.priceGross).padStart(10)}  ` +
+          `${k.status.padEnd(9)} ${k.plan.name.padEnd(28)} ${k.member.firstName} ${k.member.lastName}`,
+      );
+    }
+    if (karnetIds.length === 0) {
+      console.log("\nWskaz, ktore skasowac: --karnet <id> (mozna wiele razy), potem --usun.");
+      console.log("UWAGA: karnet sprzedany z zerowa zaliczka moze byc prawdziwy.");
+      return;
+    }
+    const nieznane = karnetIds.filter((id) => !bezWplat.some((k) => k.id === id));
+    if (nieznane.length > 0) {
+      console.error(`\nBLAD: te id nie sa karnetami bez wplat: ${nieznane.join(", ")}. Przerywam.`);
+      process.exitCode = 1;
+      return;
+    }
+    const doKasacji = bezWplat.filter((k) => karnetIds.includes(k.id));
+    console.log(`\nDO SKASOWANIA (${doKasacji.length}):`);
+    for (const k of doKasacji) {
+      console.log(`  "${k.plan.name}" - ${k.member.firstName} ${k.member.lastName}`);
+    }
+    if (!wykonaj) {
+      console.log("\nTo byla proba na sucho - nic nie zostalo usuniete.");
+      return;
+    }
+    await prisma.pass.deleteMany({ where: { id: { in: doKasacji.map((k) => k.id) } } });
+    console.log(`\nSkasowano karnetow: ${doKasacji.length}.`);
+    return;
+  }
 
   const wszystkie = await prisma.payment.findMany({
     include: {
@@ -210,7 +329,16 @@ async function main() {
     await tx.payment.deleteMany({ where: { id: { in: ids }, correctsPaymentId: { not: null } } });
     await tx.payment.deleteMany({ where: { id: { in: ids } } });
 
-    // 4. Dni kasowe - przeliczamy od zera na tym, co zostało.
+    // 4. Karnety bez ani jednej wpłaty - tylko na wyraźne życzenie.
+    //    Bez tego kartoteka pokazuje kilka karnetów opłaconych jedną wpłatą,
+    //    bo `Payment.passId` jest SetNull i skasowanie wpłaty zostawia karnet
+    //    wiszący w próżni. Rezerwacje, którym ten karnet pobrał wejście, tracą
+    //    tylko wskazanie na niego (SetNull) - same obecności zostają.
+    if (usunKarnety && osierocone.length > 0) {
+      await tx.pass.deleteMany({ where: { id: { in: osierocone.map((k) => k.id) } } });
+    }
+
+    // 5. Dni kasowe - przeliczamy od zera na tym, co zostało.
     for (const d of dniKasowe.values()) {
       const dayStart = new Date(d.date);
       const dayEnd = new Date(d.date.getTime() + 86_400_000);
@@ -237,7 +365,11 @@ async function main() {
   const po = await prisma.payment.count();
   console.log(`\nUsunięto: ${doUsuniecia.length}. Wpłat w bazie po porządkach: ${po}.`);
   if (osierocone.length > 0) {
-    console.log(`Karnetów bez wpłaty: ${osierocone.length} - zostały nietknięte.`);
+    console.log(
+      usunKarnety
+        ? `Skasowano karnetów bez wpłaty: ${osierocone.length}.`
+        : `Karnetów bez wpłaty: ${osierocone.length} - zostały nietknięte.`,
+    );
   }
 }
 

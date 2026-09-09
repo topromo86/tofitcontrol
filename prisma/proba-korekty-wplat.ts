@@ -74,6 +74,7 @@ async function main() {
   const dwaDniTemu = addCalendarDays(dzis, -2);
   const zalozonePasses: string[] = [];
   const zalozonePayments: string[] = [];
+  const zalozeniKlubowicze: string[] = [];
   const dotknieteDni = [dzis, trzyDniTemu, dwaDniTemu];
 
   const kasaPrzed = await kasaDnia(location.id, dzis);
@@ -207,10 +208,27 @@ async function main() {
     );
 
     console.log("\n=== 6. Przeniesienie wplaty na inny dzien ===");
+    // Wlasny klubowicz na te probe: karnet stojacy w kolejce za poprzednim ma
+    // zostac nietkniety (SPEC.md sekcja 2), wiec przesuwania waznosci nie da
+    // sie sprawdzic na kims, kto ma juz karnet z kroku 1.
+    const trener = await prisma.trainer.findFirstOrThrow({ select: { id: true } });
+    const member2 = await prisma.member.create({
+      data: {
+        firstName: "Próba",
+        lastName: "Regresyjna",
+        birthDate: new Date("1990-01-01"),
+        isMinor: false,
+        ownerTrainerId: trener.id,
+        homeLocationId: location.id,
+      },
+      select: { id: true },
+    });
+    zalozeniKlubowicze.push(member2.id);
+    const plan2 = plan;
     const sprzedaz3 = await prisma.$transaction((tx) =>
       sellPass(tx, {
-        memberId: member.id,
-        planId: plan.id,
+        memberId: member2.id,
+        planId: plan2.id,
         locationId: location.id,
         method: "CASH",
         actorUserId: admin.id,
@@ -260,6 +278,25 @@ async function main() {
       `${celPrzed} -> ${celPo}`,
     );
 
+    // Karnet jest wazny N dni OD SPRZEDAZY, wiec musi pojsc razem z wplata -
+    // inaczej klient traci dni tylko dlatego, ze wlasciciel wpisal pieniadze
+    // dzien pozniej.
+    const karnetPo = await prisma.pass.findUniqueOrThrow({
+      where: { id: sprzedaz3.id },
+      include: { plan: { select: { durationDays: true } } },
+    });
+    sprawdz(
+      "karnet zaczyna sie w nowej dacie wplaty",
+      todayInTimeZone(karnetPo.startsAt).day === dwaDniTemu.day,
+      karnetPo.startsAt.toISOString().slice(0, 10),
+    );
+    sprawdz(
+      "waznosc karnetu przeliczona od nowa",
+      karnetPo.endsAt.getTime() ===
+        karnetPo.startsAt.getTime() + karnetPo.plan.durationDays * 86_400_000,
+      `${karnetPo.startsAt.toISOString().slice(0, 10)} -> ${karnetPo.endsAt.toISOString().slice(0, 10)}`,
+    );
+
     const wPrzyszlosc = await changePaymentDate({
       paymentId: wplata3.id,
       actorUserId: admin.id,
@@ -272,6 +309,11 @@ async function main() {
     await prisma.payment.deleteMany({ where: { correctsPaymentId: { in: zalozonePayments } } });
     await prisma.payment.deleteMany({ where: { passId: { in: zalozonePasses } } });
     await prisma.pass.deleteMany({ where: { id: { in: zalozonePasses } } });
+    if (zalozeniKlubowicze.length > 0) {
+      await prisma.activityLog.deleteMany({ where: { memberId: { in: zalozeniKlubowicze } } });
+      await prisma.onboardingStep.deleteMany({ where: { memberId: { in: zalozeniKlubowicze } } });
+      await prisma.member.deleteMany({ where: { id: { in: zalozeniKlubowicze } } });
+    }
     for (const d of dotknieteDni) {
       await prisma.cashDay.deleteMany({ where: { locationId: location.id, date: sqlDay(d) } });
     }

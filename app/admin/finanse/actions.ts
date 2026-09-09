@@ -125,6 +125,9 @@ export async function changePaymentDateAction(formData: FormData) {
 
   const opis =
     `Data wpłaty zmieniona na ${wynik.na.toISOString().slice(0, 10)}.` +
-    (wynik.korekt > 0 ? ` Korekty (${wynik.korekt}) przesunięte razem z nią.` : "");
+    (wynik.korekt > 0 ? ` Korekty (${wynik.korekt}) przesunięte razem z nią.` : "") +
+    // Ważność karnetu liczy się od sprzedaży, więc idzie razem z datą - i klub
+    // ma to zobaczyć, bo to jest zmiana widoczna dla klienta.
+    (wynik.karnetDo ? ` Karnet ważny teraz do ${wynik.karnetDo.toISOString().slice(0, 10)}.` : "");
   redirect(`${powrot}?info=${encodeURIComponent(opis)}`);
 }

@@ -4,6 +4,7 @@ import {
   MAX_BACKDATE_DAYS,
   isoDay,
   planCancellation,
+  planPassShift,
   resolvePaymentDate,
 } from "./payment-correction";
 
@@ -105,5 +106,56 @@ describe("planCancellation", () => {
       ok: false,
       reason: "BRAK_POWODU",
     });
+  });
+});
+
+describe("planPassShift", () => {
+  const D = (iso: string) => new Date(iso);
+
+  it("przesuwa karnet, który zaczął się w dniu wpłaty", () => {
+    const wynik = planPassShift({
+      passStartsAt: D("2026-09-09T10:15:00Z"),
+      paymentRecordedAt: D("2026-09-09T10:15:00Z"),
+      newRecordedAt: D("2026-09-07T10:00:00Z"),
+      durationDays: 30,
+    });
+    expect(wynik.move).toBe(true);
+    if (wynik.move) {
+      expect(wynik.startsAt.toISOString()).toBe("2026-09-07T10:00:00.000Z");
+      // 30 dni później - klient dostaje pełne 30 dni od nowej daty sprzedaży.
+      expect(wynik.endsAt.toISOString()).toBe("2026-10-07T10:00:00.000Z");
+    }
+  });
+
+  it("NIE rusza karnetu stojącego w kolejce za poprzednim", () => {
+    // Klient miał karnet do 20 września, więc nowy startuje wtedy, a nie w dniu
+    // zapłaty. Przesunięcie nałożyłoby dwa karnety na siebie.
+    const wynik = planPassShift({
+      passStartsAt: D("2026-09-20T00:00:00Z"),
+      paymentRecordedAt: D("2026-09-09T10:15:00Z"),
+      newRecordedAt: D("2026-09-07T10:00:00Z"),
+      durationDays: 30,
+    });
+    expect(wynik).toEqual({ move: false, reason: "KOLEJKOWANY" });
+  });
+
+  it("porównuje DZIEŃ, nie moment - sprzedaż ma sekundy, data wsteczna południe", () => {
+    const wynik = planPassShift({
+      passStartsAt: D("2026-09-09T06:03:47Z"),
+      paymentRecordedAt: D("2026-09-09T10:00:00Z"),
+      newRecordedAt: D("2026-09-08T10:00:00Z"),
+      durationDays: 30,
+    });
+    expect(wynik.move).toBe(true);
+  });
+
+  it("respektuje długość planu inną niż 30 dni", () => {
+    const wynik = planPassShift({
+      passStartsAt: D("2026-09-09T10:00:00Z"),
+      paymentRecordedAt: D("2026-09-09T10:00:00Z"),
+      newRecordedAt: D("2026-09-09T10:00:00Z"),
+      durationDays: 90,
+    });
+    expect(wynik.move && wynik.endsAt.toISOString()).toBe("2026-12-08T10:00:00.000Z");
   });
 });
