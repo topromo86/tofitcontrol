@@ -110,10 +110,10 @@ karnetów**, bez programisty.
 ## Kiosk na sali
 
 Tablet ma własne konto (rola `KIOSK`, login `kiosk`). Po zalogowaniu widzi
-wyłącznie `/kod-zajec`: kod QR najbliższych zajęć dla klubowiczów i skaner
-kodów rotacyjnych dla prowadzącego. Nie widzi kartoteki, pieniędzy ani grafiku -
-hasło do tego konta zna cały klub, więc uprawnienia muszą być zerowe. Dlatego
-osobna rola, a nie "trener techniczny".
+wyłącznie `/kod-zajec` i **niczego nie skanuje** - pokazuje kod QR najbliższych
+zajęć. Nie widzi kartoteki, pieniędzy ani grafiku - hasło do tego konta zna cały
+klub, więc uprawnienia muszą być zerowe. Dlatego osobna rola, a nie "trener
+techniczny".
 
 Założenie/zmiana hasła konta kiosku (hasło w wywołaniu, nie w repozytorium):
 
@@ -122,9 +122,50 @@ npx tsx prisma/kiosk-account.ts --haslo <haslo>
 npx tsx prisma/kiosk-account.ts --env .env.vercel --haslo <haslo>
 ```
 
-Kamera działa tylko po HTTPS - na Vercelu tak, na tablecie wpiętym po adresie
-IP w sieci lokalnej nie. Dekodowanie ma dwie drogi: natywny `BarcodeDetector`
-(Chrome/Android) i `jsQR` dla Safari na iPadzie.
+Ekran odświeża się sam co 30 s (`<meta refresh>`, bez grama JS), więc kod
+przeskakuje na kolejne zajęcia bez dotykania tabletu. Kiedy kiosk miał jeszcze
+kamerę, to odświeżanie gasiło ją w połowie skanu i odczyt przepadał bez śladu -
+po usunięciu kamery problem zniknął razem z nią.
+
+## Jeden kod na zajęcia i nic poza nim
+
+Odbicie obecności ma **dokładnie jedną drogę**: kiosk pokazuje kod tych zajęć,
+a prowadzący i klubowicze skanują go własnym telefonem i potwierdzają u siebie
+(`/z/[token]` -> `scanClassQr`). Kod pojawia się 15 minut przed startem
+(`qrOpensMinutesBefore`) i gaśnie z końcem zajęć; każde zajęcia mają własny,
+więc zdjęcie wczorajszego ekranu nikogo nie wpuści.
+
+Wcześniej dróg było cztery i **to był problem sam w sobie**: człowiek na sali
+musiał wiedzieć, który z kilku kodów zeskanować, a każda droga miała własne
+reguły i własne wady. Zniknęły:
+
+- **osobisty kod rotacyjny** (`/kod`, „Mój kod wejścia") wraz z całą warstwą
+  `rotating-code` - klubowicz nie generuje już żadnego kodu,
+- **stacja wejścia** (`/skaner`), na której personel skanował kody klubowiczów.
+  Czytała `User.checkInToken`, którego **żaden ekran nie wyświetlał** - była
+  ślepa od dawna i nikt tego nie zauważył, bo nikt na nią nie patrzył,
+- **kamera kiosku** (`checkInAtStation`) - zgadywała, których zajęć dotyczy
+  skan, bo kod osobisty mówił tylko, KTO stoi przed obiektywem,
+- **kod na ścianie** (`/qr/[locationId]`) - stały kod na salę, więc dawał się
+  sfotografować i użyć spoza budynku, a jako "zapas" był drugim kodem, przed
+  którym trzeba by stawiać tabliczkę, kiedy go używać.
+
+Rozstrzyganie „kto się odbił" nic na tym nie straciło: całe siedzi
+w `checkInUserToSession` (`lib/services/class-qr.ts`), przez którą przechodzi
+jedyna pozostała droga.
+
+**Zapasem nie jest drugi kod, tylko człowiek.** Gdy tablet nie działa, nie ma
+prądu albo klubowicz przyszedł bez telefonu, obecność wpisuje trener ze swojego
+panelu i zatwierdza liczbę osób na sali - i to działa bez łącza (patrz niżej).
+Kolejny kod QR jako zapas oznaczałby dwa kody na ścianie i pytanie „który?"
+zadawane przez ludzi w trakcie rozgrzewki.
+
+Po tej zmianie `User.checkInToken` i tabela `FloorCheckIn` (wejście do budynku)
+nie mają już żadnego ekranu. **Kolumn nie kasujemy** - z tego samego powodu co
+przy `isDemo`: migracja kasująca kolumnę jest nieodwracalna, a pusta kolumna nic
+nie kosztuje. Dane demonstracyjne nadal zakładają wiersze `FloorCheckIn`
+i nadal je sprzątają - to nie przeszkadza, a ruszanie sprawdzonej ścieżki
+usuwania demo byłoby ryzykiem bez zysku.
 
 ## Praca bez sieci
 
@@ -147,12 +188,16 @@ Gdyby była, wskaźnik kłamałby i przestano by mu wierzyć.
 ### Co da się zapisać bez łącza
 
 Wyłącznie zdarzenia z sali, bo one się **dopisują**, a nie nadpisują — dwie
-osoby offline nie zrobią sobie nawzajem krzywdy:
+osoby offline nie zrobią sobie nawzajem krzywdy. Po sprowadzeniu odbić do
+jednego kodu zostały dwa zapisy, oba z panelu trenera:
 
-- `/skaner` — odbicie osobistego kodu QR na stacji wejścia,
-- `/kod-zajec` — kod rotacyjny na kiosku,
-- panel trenera — ręczne zaznaczenie obecności i potwierdzenie listy,
-- `/qr/[locationId]` — meldunek klubowicza z kodu na ścianie.
+- ręczne zaznaczenie obecności na liście „Dziś" (`OBECNOSC_RECZNA`),
+- zatwierdzenie policzonej na sali liczby obecnych (`POTWIERDZENIE_OBECNOSCI`).
+
+To nie jest zubożenie, tylko przesunięcie ciężaru tam, gdzie i tak był:
+klubowicz skanuje kod **własnym telefonem**, najczęściej po swoim internecie,
+więc padnięte wifi klubu go nie dotyczy. A gdy nie dotrze nic - obecność wpisuje
+trener, i to właśnie ten zapis musi przeżyć brak łącza.
 
 Reszta panelu bez sieci działa **tylko do odczytu** (service worker podaje
 ostatnio otwarte ekrany z pamięci urządzenia). Kolejkowanie edycji karnetów,
@@ -161,10 +206,10 @@ kasy czy grafiku byłoby prostą drogą do skasowania cudzej zmiany.
 ### Jak wracają do bazy
 
 Zapis bez łącza trafia do kolejki w `localStorage` (`lib/offline/queue.ts`)
-razem z **godziną zdarzenia**, nie wysyłki. To nie jest kosmetyka: kod
-rotacyjny żyje 30 sekund, więc sprawdzony wobec „teraz" po powrocie wifi
-zawsze byłby wygasły. Serwer sprawdza go wobec momentu, w którym stanął przed
-kamerą.
+razem z **godziną zdarzenia**, nie wysyłki. To nie jest kosmetyka: obecność
+z 18:05 dopisana po powrocie wifi o 21:30 rozjechałaby godziny obecności,
+statystyki frekwencji i okna zapisu. Do bazy idzie moment, w którym rzecz
+wydarzyła się na sali.
 
 Data przychodzi z przeglądarki, więc nie jest zaufana — przepuszcza ją
 `resolveRecordedAt` (`lib/domain/offline-queue.ts`): nie z przyszłości, nie
@@ -218,15 +263,18 @@ mechanizm ma chronić.
 
 ## Kto prowadzi zajecia, a kto sie odbil
 
-Kiosk zapisywal godzine odbicia prowadzacego, ale nikt nie sprawdzal, czy
+System zapisywal godzine odbicia prowadzacego, ale nikt nie sprawdzal, czy
 odbija sie TEN prowadzacy. Kolega, ktory wzial zajecia za chorego i nie
 wyklikal zastepstwa, dostawal "nie masz zapisu na te zajecia" - zajecia
 zostawaly bez sladu prowadzacego, a wlasciciel nie dowiadywal sie o niczym.
 
+Prowadzacy odbija sie tak samo jak klubowicz: skanuje telefonem kod zajec
+z kiosku. Roznice robi konto, nie kod - dlatego jeden kod wystarcza dla obu.
+
 Rozstrzygniecie siedzi w `judgeTrainerScan` (`lib/domain/class-qr.ts`) i ma
 cztery wyniki:
 
-| kto stanal przed kamera | co robimy |
+| kto zeskanowal kod zajec | co robimy |
 | --- | --- |
 | prowadzacy (z grafiku albo **potwierdzony** zastepca) | odbicie jak dotad |
 | inny trener, nikt sie jeszcze nie odbil | odbicie **zapisujemy** + alert do wlasciciela |
@@ -241,8 +289,9 @@ Gdy przypisany prowadzacy odbije sie pozniej, jego odbicie **nadpisuje**
 zastepcze - to on prowadzi zajecia i jego godzina ma byc w bazie. Slad po
 tamtym odbiciu zostaje w historii aktywnosci.
 
-Tylko PIERWSZY zastepczy skan zaklada odbicie, wiec kamera widzaca ten sam kod
-przez kilkanascie klatek nie zasypuje wlasciciela powiadomieniami.
+Tylko PIERWSZY zastepczy skan zaklada odbicie - drugi trafia juz na
+`ALREADY_CHECKED_IN`, wiec podwojne klikniecie nie zasypuje wlasciciela
+powiadomieniami.
 
 ### Jak dowiaduje sie wlasciciel
 

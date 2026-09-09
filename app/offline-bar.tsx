@@ -49,7 +49,7 @@ function odstepPo(nieudane: number): number {
 const PODSUMOWANIE_MS = 12_000;
 
 // Wysyłka jest jedna na przeglądarkę, choćby pas wisiał na dwóch ekranach
-// naraz (panel i stacja w dwóch kartach). Bez tego ten sam zapis poszedłby
+// naraz (panel trenera otwarty w dwóch kartach). Bez tego ten sam zapis poszedłby
 // dwa razy.
 let wLocie = false;
 

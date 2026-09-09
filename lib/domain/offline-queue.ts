@@ -13,27 +13,17 @@
 // nawzajem krzywdy. Reszta panelu bez sieci działa tylko do odczytu.
 
 export type OfflineOp =
-  // Stacja wejścia (/skaner): personel skanuje osobisty kod QR klubowicza.
-  | "WEJSCIE_NA_SALE"
-  // Kiosk (/kod-zajec): kamera czyta osobisty kod rotacyjny prowadzącego lub
-  // klubowicza i odbija go na trwających zajęciach.
-  | "ODBICIE_NA_ZAJECIACH"
   // Trener zaznacza obecność ręcznie na liście "Dziś".
   | "OBECNOSC_RECZNA"
   // Trener zatwierdza policzoną na sali liczbę obecnych.
-  | "POTWIERDZENIE_OBECNOSCI"
-  // Klubowicz melduje się sam z kodu na ścianie (/qr/[locationId]).
-  | "MELDUNEK_KLUBOWICZA";
+  | "POTWIERDZENIE_OBECNOSCI";
 
 // Nagłówek pozycji na liście do zatwierdzenia. Ma dać się rozpoznać bez
 // zaglądania w bazę - to jedyne, co człowiek zobaczy przed kliknięciem
 // "Dopisz do bazy".
 export const OP_LABEL: Record<OfflineOp, string> = {
-  WEJSCIE_NA_SALE: "Wejście na salę",
-  ODBICIE_NA_ZAJECIACH: "Odbicie na zajęciach",
   OBECNOSC_RECZNA: "Obecność zaznaczona ręcznie",
   POTWIERDZENIE_OBECNOSCI: "Potwierdzenie listy obecności",
-  MELDUNEK_KLUBOWICZA: "Meldunek klubowicza",
 };
 
 export type OfflineEntry = {

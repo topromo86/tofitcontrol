@@ -2,19 +2,13 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import {
-  checkScanTime,
-  judgeTrainerScan,
-  qrWindow,
-  type ScanRejection,
-} from "@/lib/domain/class-qr";
+import { checkScanTime, judgeTrainerScan, type ScanRejection } from "@/lib/domain/class-qr";
 import { effectiveTrainerId } from "@/lib/domain/substitute";
 import { formatDayTime, formatTime } from "@/lib/format";
 import { alertAdmins } from "@/lib/services/admin-alert";
 import { logActivity } from "@/lib/services/activity";
 import { decrementPassEntryIfLimited } from "@/lib/services/pass";
 import { markJoinedIfNeeded } from "@/lib/services/member";
-import { verifyRotatingCode } from "@/lib/services/rotating-code";
 import { getClubSettings } from "@/lib/services/settings";
 
 // Odbicia na zajęciach. Dwie drogi, jedna reguła:
@@ -249,7 +243,13 @@ async function checkInUserToSession(input: {
   };
 }
 
-// Droga 1: klubowicz zeskanował telefonem kod zajęć z ekranu kiosku.
+// Jedyna droga odbicia obecności z kodu: prowadzący albo klubowicz skanuje
+// telefonem kod zajęć z ekranu kiosku i potwierdza u siebie.
+//
+// Wcześniej była tu druga droga (`checkInAtStation`): kamera kiosku czytała
+// osobisty kod rotacyjny. Zniknęła razem z kodami osobistymi - jeden kod na
+// zajęcia, wszyscy skanują to samo. Rozstrzyganie "kto się odbił" nic na tym
+// nie straciło, bo całe siedzi w `checkInUserToSession` niżej.
 export async function scanClassQr(input: {
   token: string;
   userId: string;
@@ -270,95 +270,6 @@ export async function scanClassQr(input: {
   return checkInUserToSession({
     session,
     userId: input.userId,
-    now,
-    trainerCheckInMinutesBefore: settings.trainerCheckInMinutesBefore,
-  });
-}
-
-export type StationScanOutcome =
-  ScanOutcome | { ok: false; reason: "CODE_EXPIRED" | "CODE_INVALID" | "NO_OPEN_CLASS" };
-
-// Droga 2: kiosk zeskanował osobisty kod rotacyjny. Kod mówi, KTO stoi przed
-// kamerą; zajęcia wybieramy z grafiku tej sali.
-export async function checkInAtStation(input: {
-  code: string;
-  locationId: string;
-  now?: Date;
-}): Promise<StationScanOutcome> {
-  const now = input.now ?? new Date();
-  const settings = await getClubSettings();
-
-  const verdict = verifyRotatingCode(input.code, now);
-  if (!verdict.ok) {
-    // Wygasły kod to najczęstszy przypadek przy kamerze (ktoś pokazał zrzut
-    // ekranu albo trzymał telefon zbyt długo) - ma własny komunikat.
-    return { ok: false, reason: verdict.reason === "EXPIRED" ? "CODE_EXPIRED" : "CODE_INVALID" };
-  }
-
-  const candidates = await prisma.session.findMany({
-    where: {
-      locationId: input.locationId,
-      status: "SCHEDULED",
-      endsAt: { gte: now },
-      startsAt: { lte: new Date(now.getTime() + 12 * 3_600_000) },
-    },
-    include: SESSION_INCLUDE,
-    orderBy: { startsAt: "asc" },
-  });
-
-  const open = candidates.filter((s) => {
-    const window = qrWindow(s, settings.qrOpensMinutesBefore);
-    return now >= window.opensAt && now <= window.closesAt;
-  });
-  if (open.length === 0) return { ok: false, reason: "NO_OPEN_CLASS" };
-
-  // W sali potrafią wypaść dwie grupy pod rząd. Wybieramy te zajęcia, które
-  // realnie dotyczą tej osoby - prowadzi je albo ma na nie zapis. Dopiero przy
-  // remisie decyduje kolejność w grafiku.
-  const own = await Promise.all(
-    open.map(async (s) => {
-      if (leadTrainerUserId(s) === verdict.userId) return s;
-      const booking = await prisma.booking.findFirst({
-        where: {
-          sessionId: s.id,
-          status: { in: ["BOOKED", "ATTENDED"] },
-          member: { OR: [{ user: { id: verdict.userId } }, { guardianUserId: verdict.userId }] },
-        },
-        select: { id: true },
-      });
-      return booking ? s : null;
-    }),
-  );
-
-  const session = own.find((s) => s !== null) ?? null;
-  if (session) {
-    return checkInUserToSession({
-      session,
-      userId: verdict.userId,
-      now,
-      trainerCheckInMinutesBefore: settings.trainerCheckInMinutesBefore,
-    });
-  }
-
-  // Nikt tu na tę osobę nie czeka: nie prowadzi żadnych z otwartych zajęć i nie
-  // ma na nie zapisu. Zanim odmówimy, sprawdzamy przypadek, który na sali jest
-  // codziennością: to trener, który wziął zajęcia za kolegę, a zastępstwa nikt
-  // nie zdążył wyklikać. Bez tego kiosk mówił mu "nie masz zapisu", zajęcia
-  // zostawały bez śladu prowadzącego, a właściciel nie dowiadywał się o niczym.
-  const scanner = await prisma.trainer.findUnique({
-    where: { userId: verdict.userId },
-    select: { id: true },
-  });
-  if (!scanner) return { ok: false, reason: "NOT_ON_LIST" };
-
-  // Zajęcia, na których nikt jeszcze nie odbił się jako prowadzący. Gdy takich
-  // nie ma, nie ma też czego zastępować - i nie ma o czym alarmować.
-  const standIn = open.find((s) => s.trainerCheckedInAt === null) ?? null;
-  if (!standIn) return { ok: false, reason: "LEAD_ALREADY_CHECKED_IN" };
-
-  return checkInUserToSession({
-    session: standIn,
-    userId: verdict.userId,
     now,
     trainerCheckInMinutesBefore: settings.trainerCheckInMinutesBefore,
   });

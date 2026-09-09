@@ -35,16 +35,16 @@ describe("kolejka offline", () => {
     const queue = await freshQueue();
     const scannedAt = new Date("2026-08-25T16:03:00Z");
     queue.enqueue({
-      op: "WEJSCIE_NA_SALE",
-      detail: "Tychy · ···abc123",
-      payload: { token: "t", locationId: "l" },
+      op: "OBECNOSC_RECZNA",
+      detail: "Tychy · Boks 18:00",
+      payload: { bookingId: "b" },
       recordedAt: scannedAt,
     });
 
     const entries = queue.getEntries();
     expect(entries).toHaveLength(1);
     expect(entries[0].recordedAtIso).toBe(scannedAt.toISOString());
-    expect(entries[0].payload).toEqual({ token: "t", locationId: "l" });
+    expect(entries[0].payload).toEqual({ bookingId: "b" });
   });
 
   it("przeżywa przeładowanie karty", async () => {

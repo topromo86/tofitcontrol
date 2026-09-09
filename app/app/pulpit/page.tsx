@@ -158,6 +158,23 @@ export default async function ClientDashboardPage({
         ))}
       </section>
 
+      {/* Jak odbić obecność. Krótko i na pulpicie, bo klubowicz nie ma już
+          żadnego własnego kodu do pokazania - jedyna droga prowadzi przez kod
+          z tabletu na sali, a bez tego zdania nie ma skąd o tym wiedzieć. */}
+      <section className="border-line bg-surface flex flex-col gap-1 rounded-md border p-4">
+        <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+          Jak odbić obecność
+        </h2>
+        <p className="text-text text-sm">
+          Zeskanuj telefonem kod QR z tabletu na sali i potwierdź obecność na swoim ekranie. Kod
+          pojawia się kilkanaście minut przed zajęciami i każde zajęcia mają własny.
+        </p>
+        <p className="text-muted-brand text-sm">
+          Nie potrzebujesz żadnego kodu u siebie. Jeśli coś nie zadziała, powiedz trenerowi -
+          zaznaczy Cię z listy.
+        </p>
+      </section>
+
       {todo.length > 0 ? (
         <section className="flex flex-col gap-3">
           <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">

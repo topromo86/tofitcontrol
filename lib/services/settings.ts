@@ -16,7 +16,6 @@ export type ClubSettingsView = {
   bonusAmountGross: number;
   freeCancellationHours: number;
   fontTheme: FontThemeId;
-  floorMinMinutes: number;
   qrOpensMinutesBefore: number;
   trainerCheckInMinutesBefore: number;
 };
@@ -36,7 +35,6 @@ export async function getClubSettings(): Promise<ClubSettingsView> {
     bonusAmountGross: settings?.bonusAmountGross ?? 0,
     freeCancellationHours: settings?.freeCancellationHours ?? FREE_CANCELLATION_WINDOW_HOURS,
     fontTheme: resolveFontTheme(settings?.fontTheme),
-    floorMinMinutes: settings?.floorMinMinutes ?? 0,
     qrOpensMinutesBefore: settings?.qrOpensMinutesBefore ?? DEFAULT_QR_OPENS_MINUTES_BEFORE,
     trainerCheckInMinutesBefore:
       settings?.trainerCheckInMinutesBefore ?? DEFAULT_TRAINER_CHECK_IN_MINUTES_BEFORE,

@@ -15,7 +15,6 @@ import { formatTime } from "@/lib/format";
 import { qrSvg } from "@/lib/qr";
 import { ConnectionBadge } from "../connection-badge";
 import { OfflineBar } from "../offline-bar";
-import { ClassScanner } from "./class-scanner";
 import { KioskClock } from "./kiosk-clock";
 
 // Stacja z kodem zajęć - tablet albo telefon leżący przy wejściu na salę.
@@ -155,20 +154,6 @@ export default async function ClassQrStationPage({
           ))}
         </div>
       ) : null}
-
-      {/* Skaner na górze: to jest droga PROWADZĄCEGO i jedyna, która dowodzi
-          obecności na sali - kod z telefonu żyje 30 s, więc trzeba stanąć przy
-          tym urządzeniu. Klubowicze mogą go użyć tak samo, ale mają też kod
-          zajęć niżej, żeby dwadzieścia osób nie stało w kolejce. */}
-      <section className="border-line bg-surface rounded-md border p-4">
-        <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
-          Odbicie kodem z telefonu
-        </h2>
-        <p className="text-muted-brand mt-1 mb-3 text-sm">
-          Prowadzący odbija się wyłącznie tędy. Pokaż kod z zakładki „Mój kod wejścia”.
-        </p>
-        <ClassScanner locationId={activeLocationId} locationName={activeLocation?.name ?? null} />
-      </section>
 
       {cards.length === 0 ? (
         <div className="border-line bg-surface rounded-md border p-6 text-center">

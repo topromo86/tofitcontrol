@@ -87,7 +87,7 @@ describe("applyFlushOutcomes", () => {
   const entries: OfflineEntry[] = [
     {
       id: "a",
-      op: "WEJSCIE_NA_SALE",
+      op: "OBECNOSC_RECZNA",
       recordedAtIso: minutesAgo(10),
       detail: "Jan Kowalski",
       payload: {},
@@ -127,7 +127,7 @@ describe("applyFlushOutcomes", () => {
 describe("autoSendable", () => {
   const swiezy: OfflineEntry = {
     id: "a",
-    op: "WEJSCIE_NA_SALE",
+    op: "OBECNOSC_RECZNA",
     recordedAtIso: minutesAgo(5),
     detail: "Jan Kowalski",
     payload: {},

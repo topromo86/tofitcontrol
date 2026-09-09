@@ -2,26 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import {
-  requireMemberAccess,
-  requireOwnsSession,
-  requireRole,
-  requireSession,
-} from "@/lib/auth/guard";
+import { requireOwnsSession, requireSession } from "@/lib/auth/guard";
 import {
   RECORDED_AT_MESSAGE,
   resolveRecordedAt,
   type FlushOutcome,
   type OfflineEntry,
 } from "@/lib/domain/offline-queue";
-import { SCAN_REJECTION_MESSAGE } from "@/lib/domain/class-qr";
-import { checkInAtStation } from "@/lib/services/class-qr";
-import { recordFloorCheckInByToken } from "@/lib/services/floor-checkin";
-import {
-  confirmSessionAttendance,
-  markManualAttendance,
-  selfCheckIn,
-} from "@/lib/services/attendance";
+import { confirmSessionAttendance, markManualAttendance } from "@/lib/services/attendance";
 
 // Dopisanie do bazy zapisów zrobionych bez łącza.
 //
@@ -40,48 +28,12 @@ import {
 // kilkanaście pozycji; tysiąc oznacza pomyłkę albo zabawę, a nie klub.
 const MAX_POZYCJI = 200;
 
-const CZAS_ODMOWY: Record<string, string> = {
-  UNKNOWN_TOKEN: "Nieznany kod wejścia - konto mogło zostać w międzyczasie zmienione.",
-  CODE_EXPIRED: "Kod był już nieważny w chwili skanowania.",
-  CODE_INVALID: "To nie jest kod wejścia z tej aplikacji.",
-  NO_OPEN_CLASS: "O tej godzinie w tej sali nie było zajęć z aktywnym kodem.",
-};
-
 function opis(blad: unknown): string {
   return blad instanceof Error ? blad.message : "Nie udało się dopisać tego zapisu.";
 }
 
 async function dopisz(entry: OfflineEntry, at: Date): Promise<void> {
   switch (entry.op) {
-    case "WEJSCIE_NA_SALE": {
-      const session = await requireRole("ADMIN", "TRAINER");
-      const wynik = await recordFloorCheckInByToken({
-        token: String(entry.payload.token ?? ""),
-        locationId: String(entry.payload.locationId ?? ""),
-        recordedByUserId: session.user.id,
-        now: at,
-      });
-      if (!wynik.ok) throw new Error(CZAS_ODMOWY.UNKNOWN_TOKEN);
-      return;
-    }
-
-    case "ODBICIE_NA_ZAJECIACH": {
-      await requireRole("ADMIN", "TRAINER", "KIOSK");
-      const wynik = await checkInAtStation({
-        code: String(entry.payload.code ?? ""),
-        locationId: String(entry.payload.locationId ?? ""),
-        now: at,
-      });
-      if (!wynik.ok) {
-        throw new Error(
-          CZAS_ODMOWY[wynik.reason] ??
-            SCAN_REJECTION_MESSAGE[wynik.reason as keyof typeof SCAN_REJECTION_MESSAGE] ??
-            "Nie udało się odbić.",
-        );
-      }
-      return;
-    }
-
     case "OBECNOSC_RECZNA": {
       const bookingId = String(entry.payload.bookingId ?? "");
       const booking = await prisma.booking.findUnique({
@@ -104,21 +56,6 @@ async function dopisz(entry: OfflineEntry, at: Date): Promise<void> {
         at,
       });
       if (!wynik.ok) throw new Error("Liczba obecnych była poza zakresem.");
-      return;
-    }
-
-    case "MELDUNEK_KLUBOWICZA": {
-      const bookingId = String(entry.payload.bookingId ?? "");
-      const booking = await prisma.booking.findUnique({
-        where: { id: bookingId },
-        select: { memberId: true },
-      });
-      if (!booking) throw new Error("Rezerwacja zniknęła - nie ma czego zameldować.");
-      await requireMemberAccess(booking.memberId);
-      const wynik = await selfCheckIn({ bookingId, at });
-      if (!wynik.ok) {
-        throw new Error("Meldunek był poza oknem czasowym zajęć (-30/+20 min).");
-      }
       return;
     }
   }
@@ -151,7 +88,6 @@ export async function flushOfflineQueueAction(entries: OfflineEntry[]): Promise<
 
   // Ekrany, na których te zapisy widać. Odświeżamy raz na całą wysyłkę.
   revalidatePath("/trainer");
-  revalidatePath("/skaner");
   revalidatePath("/kod-zajec");
 
   return wyniki;
