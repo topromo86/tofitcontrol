@@ -22,6 +22,40 @@ export function classifyPassStatus(
   return "ACTIVE";
 }
 
+// --- Pilność: jeden stan karnetu na potrzeby kartoteki ----------------------
+//
+// Kartoteka (/admin) pokazuje przy każdym człowieku kolor, kropkę i tekst. Do
+// niedawna liczyła to sama, wywołaniem `classifyPassStatus(!isFrozen ? pass : null)`
+// - a dla karnetu zamrożonego podstawiała `null`, więc dostawała "NONE"
+// i malowała OPŁACONY karnet na czerwono, czyli barwą "ten człowiek nie ma
+// karnetu". Stąd jedna funkcja: z niej bierze się i kropka, i ton tekstu, i sam
+// tekst, więc nie ma jak się rozjechać.
+//
+// Liczymy z NAJGORSZEGO karnetu, nie z pierwszego lepszego. Klub sprzedaje
+// osobno karnet grupowy i indywidualny (patrz `pickPassForSession` niżej), więc
+// klient potrafi mieć dwa naraz - a wtedy branie tego z dalszą datą pokazuje
+// spokojny wiersz, choć grupowy wygasł wczoraj.
+
+export type Pilnosc = "BRAK" | "KONCZY_SIE" | "ZAMROZONY" | "OK";
+
+export type PassForUrgency = {
+  endsAt: Date;
+  status: string;
+};
+
+export function pilnosc(passes: readonly PassForUrgency[], now: Date): Pilnosc {
+  if (passes.length === 0) return "BRAK";
+
+  // Zamrożony karnet nie jest ani problemem, ani gotowością do wejścia na salę -
+  // ma własny, stonowany stan. Dopiero gdy WSZYSTKIE są zamrożone, opisuje on
+  // całego klubowicza.
+  const czynne = passes.filter((p) => p.status !== "FROZEN");
+  if (czynne.length === 0) return "ZAMROZONY";
+
+  const najblizszyKoniec = czynne.reduce((a, b) => (a.endsAt <= b.endsAt ? a : b));
+  return classifyPassStatus(najblizszyKoniec, now) === "EXPIRING_SOON" ? "KONCZY_SIE" : "OK";
+}
+
 // --- Który karnet obsługuje te zajęcia -------------------------------------
 //
 // Klub sprzedaje osobno karnety na zajęcia grupowe i na treningi indywidualne,

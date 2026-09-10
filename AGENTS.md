@@ -673,12 +673,179 @@ klienta - na ekranie z danymi wrazliwymi i historia wplat to za malo.
 Zmiana powiazania to decyzja o innym ciezarze (dostep do danych dziecka), wiec
 czeka na osobna prosbe.
 
+## Kartoteka jako SPIS, nie stos kart
+
+Lista klubowiczow (`/admin`) byla piecdziesiecioma osobnymi prostokatami:
+ramka + `p-3` + `gap-2`, czyli **34 px samego chromu na czlowieka** - przy
+pelnej stronie okolo 1700 px zjedzone przez obwodki. Wiersz mial 70-86 px na
+desktopie i 106-195 px na telefonie, bo skladal sie z pieciu elementow
+warunkowych, ktore raz byly, a raz nie.
+
+Teraz cala lista to **jedna karta z separatorami** (`divide-y`), a od `lg`
+wiersz jest **siatka pieciu kolumn**: Klubowicz | Karnet | Telefon | Ostatnio |
+Akcje. Zmierzone na zywo: wiersz 36 px zamiast 70-86, telefon 71 px zamiast
+106-195, pierwszy klubowicz na 183 px zamiast 410 px od gory ekranu.
+
+### Kolumny stoja w jednej osi, bo definicja jest JEDNA
+
+`GRID_COLS` (stala modulu) niesie `grid-cols`, `gap-x` **i** `px` razem -
+naglowek kolumn i wiersz biora doslownie ten sam lancuch. Rozdzielenie ich
+konczy sie osia przesunieta o kilka pikseli, a wyrownanie jest calym powodem
+tej przebudowy: pytania zadawane tej liscie sa POROWNAWCZE ("kto konczy
+najwczesniej", "kto nie ma oplacone"), a na porownanie pozwala wylacznie
+wspolna os.
+
+Lancucha **nie wolno sklejac z fragmentow** - Tailwind skanuje zrodla
+statycznie (ta sama zasada co w `lib/domain/class-color.ts`).
+
+Siatka wlacza sie dopiero od `lg`. Przy 768 px na nazwisko zostalyby 44 px.
+
+Kontener listy **nie moze dostac `overflow-hidden`**, choc zaokraglenie o to
+prosi - menu ostatniego wiersza musi miec jak wyjsc poza karte.
+
+### Ponizej lg: dwie linie, druga przez CALA szerokosc
+
+Telefon dostaje `grid-cols-[minmax(0,1fr)_auto]`: linia pierwsza to kropka,
+nazwisko i akcje po prawej, linia druga - karnet i telefon - idzie **pod
+spodem przyciskow, przez cala szerokosc wiersza**. Przy polowie szerokosci data
+karnetu ucinala sie akurat tam, gdzie tekst jest najdluzszy: przy karnecie
+zamrozonym i przy dziecku z numerem rodzica, czyli w wierszach, w ktorych data
+znaczy najwiecej.
+
+Te same dane sa w kodzie **raz** - pojemnik drugiej linii ma `lg:contents`
+i od `lg` rozpuszcza sie w kolumny siatki. Dlatego nie wolno mu dac tla, ramki
+ani hovera: od `lg` znikna bez sladu i bez bledu, a na telefonie zostana.
+
+Linia druga **nie zawija sie** (`overflow-hidden`, bez `flex-wrap`). Zawiniecie
+uzaleznialoby wysokosc wiersza od dlugosci numeru, czyli wracalby brak rytmu,
+po ktory ten uklad powstal. Zmierzone: kazdy wiersz ma 70-71 px niezaleznie od
+wariantu (brak karnetu, zamrozony, dziecko z numerem rodzica, dlugie nazwisko).
+
+### Kolor niesie DOKLADNIE jeden fakt
+
+Kropka na poczatku wiersza zapala sie wylacznie przy problemie: czerwona przy
+braku karnetu, bursztynowa przy konczacym sie. Aktywny karnet **nie** swieci na
+zielono - gdyby swiecil, kolor mialby 80% wierszy i sygnalem stalby sie jego
+BRAK, czyli oko musialoby lapac dziure zamiast plamy.
+
+Cisza dotyczy jednak samego KOLORU. Data konca stoi w kolumnie tekstem zawsze,
+bo w jasnej sali, pod katem i przy daltonizmie kropka nie mowi nic.
+
+Kropka, a **nie pasek `border-l-4`**: ta forma ma juz w tej aplikacji ustalone
+znaczenie "rodzaj zajec" (`stripeClass` -> `border-l-cat-*`), a `globals.css`
+wprost rozdziela oba jezyki.
+
+Kolumna "Ostatnio" jest zawsze wyciszona - **nigdy bursztynowa**. Druga rzecz
+w tej samej barwie odbiera jej znaczenie obu.
+
+### `pilnosc()` zamiast liczenia koloru w ekranie
+
+Kropka, ton tekstu i sam tekst statusu biora sie z jednej funkcji domenowej
+(`pilnosc` w `lib/domain/pass.ts`). Wczesniej ekran liczyl to sam wywolaniem
+`classifyPassStatus(!isFrozen ? pass : null, now)` - dla karnetu zamrozonego
+podstawial `null`, dostawal `NONE` i malowal **oplacony karnet na czerwono**,
+czyli barwa "ten czlowiek nie ma karnetu".
+
+`pilnosc` liczy z NAJGORSZEGO karnetu. Stad tez `take: 2` i `endsAt: "asc"`
+w zapytaniu zamiast `take: 1` i `desc`: klub sprzedaje osobno karnet grupowy
+i indywidualny (`pickPassForSession`), wiec klient potrafi miec dwa naraz -
+a branie tego z dalsza data pokazywalo spokojny wiersz, choc grupowy wygasl
+wczoraj, i po cichu podstawialo JEGO plan pod "Przedluz".
+
+### Piktogram dziecka, nie napis
+
+Zamiast napisu "dziecko" przy nazwisku stoi **ikona plecaka** w barwie
+`cat-sky`. Napis zjadal szerokosc nazwiska, a to ono jest na tej liscie
+najwazniejsze; ikona czyta sie jednym spojrzeniem.
+
+Barwa jest z palety RODZAJOW ZAJEC (`cat-*`), ktora celowo nie niesie znaczenia
+statusu - czerwien, bursztyn i jadeit sa w tym wierszu zarezerwowane dla
+karnetu. Ikona nigdy nie stoi sama: ma `aria-label` dla czytnika ekranu
+i `title` z powodem, dla ktorego ten znacznik istnieje ("kontaktem jest
+rodzic").
+
+### Telefon w wierszu, bo klub dzwoni czesciej niz pisze
+
+Numer zyje na `User.phone` - kartoteka nie ma wlasnego pola. Gdy klubowicz nie
+ma konta (dziecko, klient dopisany recznie), bierzemy numer **opiekuna**
+i mowimy o tym wprost dopiskiem "(rodzic)". Bez tego kolumna milczalaby akurat
+przy dzieciach, do ktorych dzwoni sie najczesciej, i wygladalaby na zepsuta.
+
+### Co zniknelo z wiersza i dlaczego
+
+| co | dlaczego |
+| --- | --- |
+| odznaki zajec "Kids Boxing x7" | liczyly `Booking != CANCELLED`, czyli razem z `NO_SHOW`, lista rezerwowa i PRZYSZLYMI rezerwacjami, bez okna czasowego - wygladalo jak frekwencja i nia nie bylo |
+| ikona oka 44x44 | wejsciem do karty jest teraz cale pole linii nazwiska; wczesniej 265 px nazwiska bylo martwe, a klikalny byl tylko kwadrat obok |
+| "Inny karnet" | prowadzil pod DOKLADNIE ten sam adres co "Przedluz", tylko bez podstawionego planu - dwa pelnowymiarowe przyciski na jeden cel; zostal w menu wiersza |
+| "Zamroz"/"Odmroz" z rzedu | pomylkowe klikniecie bezpowrotnie zjada dzien z limitu 30 (`Math.max(1, ...)`), a stalo 8 px od przycisku od pieniedzy; zostalo w menu |
+| "wykorzystano 12/30 dni" | 48 znakow wobec 22 w "Brak aktywnego karnetu" - to ten wariant lamal wiersz na dwie linie; licznik wrocil w etykiecie pozycji menu |
+| akapit "Sprzedaz karnetu wykonuje trener..." | byl NIEPRAWDZIWY: przyciski sprzedazy stoja dwa centymetry nizej, a `/admin/wplaty` zbudowano dla wlasciciela |
+
+Zapytanie o zapisy (`booking.findMany`) idzie teraz **wylacznie przy grupowaniu
+po zajeciach** - tylko tam jest do czegos potrzebne. Zwykle wejscie na kartoteke
+stracilo cale jedno zapytanie.
+
+Naglowek grupy jest osobnym `<li>`, a nie `<p>` wewnatrz `li` z
+`display:contents`. Tamto gubilo semantyke listy i dawalo podwojny odstep,
+przez ktory naglowek z odleglosci czytalo sie jak wiersz klienta.
+
+### Filtry: jeden formularz, jeden przycisk, licznik zawezen
+
+Byly DWA formularze GET z osmioma ukrytymi polami przepisujacymi sobie nawzajem
+stan, ktory i tak w calosci siedzi w adresie, i z dwoma przyciskami wysylki
+robiacymi to samo. Do tego osobny rzad czterech przyciskow filtrow.
+
+Teraz: jeden formularz, pole szukania zawsze widoczne (przyklejone u gory - przy
+piecdziesieciu wierszach wyszukiwarka jest jedyna droga do czlowieka spoza
+pierwszej piecdziesiatki), a zawezenia pod rozwinieciem **"Filtry (N)"**
+z licznikiem czynnych. `open` przy czynnym filtrze jest zabezpieczeniem, nie
+ozdoba: zawezona lista nie ma jak udawac pelnej kartoteki. Licznik "N z M"
+przeniosl sie z prozy pod filtrami na prawa strone belki.
+
+`<select>` zajec dostal `w-full min-w-0` i `text-base md:text-sm`. To naprawa,
+nie upiekszenie: bez ograniczenia szerokosci select mierzyl sie najdluzsza
+opcja ("Gentleman Boxing - Poniedzialek 19:00 - Mikolow", okolo 382 px przy
+343 px ekranu) i **sam przewijal strone w bok**, a przy 14 px Safari na iOS
+powieksza strone przy dotknieciu i zostawia ja przesunieta.
+
+### Zamrozenie wraca tam, skad wyszlo
+
+`freezePassAction` i `unfreezePassAction` przyjmuja pole `powrot` i koncza sie
+`redirect` na nim zamiast twardego `redirect("/admin")`. Wczesniej zamrozenie
+z czterdziestego wiersza kasowalo szukanie, filtry, grupowanie i pozycje
+przewiniecia. Adres pochodzi od uzytkownika, wiec przechodzi przez
+`safeReturnPath` - inaczej bylby to otwarty przekierowywacz do phishingu.
+
+Oba formularze uzywaja `SubmitButton`, a nie golego `<Button type="submit">`:
+drugie klikniecie leci w `throw new Error("Zamrozic mozna tylko aktywny
+karnet.")`, czyli na ekran bledu, i cala lista przepada.
+
+Sama strona dostala tez `requireRole("ADMIN")` - wczesniej polegala wylacznie
+na strazniku w layoucie, a layout nie przelicza sie przy nawigacji po stronie
+klienta. Ten sam powod co przy karcie klienta.
+
+### Czego tu jeszcze nie ma
+
+- **zakladki "Do zalatwienia (N)"** zawezajacej `where` w bazie. Przy
+  `LIST_LIMIT = 50` po alfabecie pytanie "kto nie ma oplacone" nie ma
+  odpowiedzi dla calego klubu - dluznik na litere S nie istnieje. Licznik
+  policzony z pokazanej strony **klamalby**, wiec musi isc z osobnego
+  `member.count` po tym samym `where`,
+- **plakietki blokad** (doplata, brak zgod, `PENDING`, badania zawodnika).
+  Kazda wchodzi osobno i ZAWSZE razem z filtrem, ktory ja znajduje - w tym
+  ukladzie cisza znaczy "wszystko gra", wiec wiersz z polowa flag wyglada
+  spokojnie mimo istniejacej blokady, czyli gorzej niz bez nich,
+- **szukanie po numerze telefonu i po `member.email`**. Dzis `q` pyta
+  o `user.email`, czyli adres LOGOWANIA, ktorego wiersz nigdzie nie pokazuje -
+  czlowiek wpisuje adres z karty klienta i nie dostaje nic.
+
 ## Sprzedaz karnetu z kartoteki
 
-Lista klientow (`/admin`) ma przy nazwisku **"Dodaj karnet"**, a gdy karnet jest
-aktywny - **"Przedluz karnet"** (z podstawionym tym samym planem) i "Inny
-karnet". Wszystkie prowadza do `/admin/wplaty?klient=<id>`, czyli do JEDYNEGO
-formularza sprzedazy.
+Lista klientow (`/admin`) ma przy nazwisku **"Sprzedaj"**, a gdy karnet jest
+aktywny - **"Przedluz"** (z podstawionym tym samym planem) i "Inny karnet"
+w menu wiersza. Wszystkie prowadza do `/admin/wplaty?klient=<id>`, czyli do
+JEDYNEGO formularza sprzedazy.
 
 Swiadomie nie ma tu wlasnego formularza sprzedazy. Powielenie go w kartotece
 oznaczaloby drugie miejsce z rabatami, kartami podarunkowymi, kontrola

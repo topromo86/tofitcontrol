@@ -5,6 +5,21 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth/guard";
 import { logActivity } from "@/lib/services/activity";
 import { MAX_FROZEN_DAYS } from "@/lib/domain/pass";
+import { safeReturnPath } from "@/lib/domain/return-path";
+
+// Dokąd wrócić po zamrożeniu albo odmrożeniu.
+//
+// Wcześniej obie akcje kończyły się twardym redirect("/admin"), czyli kasowały
+// szukanie, filtry, grupowanie i pozycję przewinięcia. Przy liście, po której
+// realnie się scrolluje, oznacza to powrót na górę i szukanie tego samego
+// człowieka od nowa.
+//
+// Adres przychodzi z formularza, więc jest daną od użytkownika - bez
+// `safeReturnPath` byłby to otwarty przekierowywacz do phishingu, dokładnie
+// ten sam powód, dla którego pilnuje się parametru `?powrot=` przy logowaniu.
+function powrotNaListe(formData: FormData): string {
+  return safeReturnPath(formData.get("powrot"), ["/admin"], "/admin");
+}
 
 // Sprzedaż karnetu (Payment) przeniesiona wyłącznie do trenera - patrz
 // /trainer/kasa i lib/services/pass.ts#sellPass. Gotówka realnie zmienia ręce
@@ -17,6 +32,7 @@ import { MAX_FROZEN_DAYS } from "@/lib/domain/pass";
 export async function freezePassAction(formData: FormData) {
   const session = await requireRole("ADMIN");
   const passId = String(formData.get("passId"));
+  const powrot = powrotNaListe(formData);
 
   const pass = await prisma.pass.findUniqueOrThrow({
     where: { id: passId },
@@ -44,12 +60,13 @@ export async function freezePassAction(formData: FormData) {
     });
   });
 
-  redirect("/admin");
+  redirect(powrot);
 }
 
 export async function unfreezePassAction(formData: FormData) {
   const session = await requireRole("ADMIN");
   const passId = String(formData.get("passId"));
+  const powrot = powrotNaListe(formData);
 
   const pass = await prisma.pass.findUniqueOrThrow({
     where: { id: passId },
@@ -83,5 +100,5 @@ export async function unfreezePassAction(formData: FormData) {
     });
   });
 
-  redirect("/admin");
+  redirect(powrot);
 }

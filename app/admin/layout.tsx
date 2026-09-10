@@ -114,12 +114,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-line bg-surface border-b py-3">
-        <div className={`${PAGE_SHELL} flex items-center justify-between gap-4`}>
-          <div className="flex shrink-0 items-center gap-3">
+        {/* Odstepy sa mniejsze na telefonie, bo w naglowku stoi osiem rzeczy
+            naraz, a przy 375 px kazde 8 px decyduje o tym, czy strona
+            przewija sie w bok. */}
+        <div className={`${PAGE_SHELL} flex items-center justify-between gap-2 sm:gap-4`}>
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
             <BrandHeaderLogo />
             <SignedInAs role="Admin" name={session.user.name} />
           </div>
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-4">
             <HeaderNav groups={navGroups} />
             <ConnectionBadge />
             {ownTrainer ? <AccountViewSwitch current="admin" /> : null}

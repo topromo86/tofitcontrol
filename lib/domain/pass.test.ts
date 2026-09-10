@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyPassStatus, pickPassForSession, type PassForSession } from "./pass";
+import { classifyPassStatus, pickPassForSession, pilnosc, type PassForSession } from "./pass";
 
 const DAY = 86_400_000;
 
@@ -103,5 +103,44 @@ describe("pickPassForSession", () => {
 
   it("same puste karnety to null", () => {
     expect(pickPassForSession([pass({ id: "pusty", entriesLeft: 0 })], "GROUP")).toBeNull();
+  });
+});
+
+describe("pilnosc", () => {
+  const now = new Date("2026-07-18T10:00:00Z");
+  const karnet = (dni: number, status = "ACTIVE") => ({
+    endsAt: new Date(now.getTime() + dni * DAY),
+    status,
+  });
+
+  it("brak karnetów to BRAK", () => {
+    expect(pilnosc([], now)).toBe("BRAK");
+  });
+
+  it("karnet z odległym końcem to spokój", () => {
+    expect(pilnosc([karnet(30)], now)).toBe("OK");
+  });
+
+  it("karnet kończący się w progu 7 dni woła o reakcję", () => {
+    expect(pilnosc([karnet(3)], now)).toBe("KONCZY_SIE");
+  });
+
+  it("zamrożony NIE jest czerwony - to opłacony karnet", () => {
+    // Wcześniej kartoteka podstawiała dla zamrożonego `null` do
+    // classifyPassStatus, dostawała "NONE" i malowała go barwą "brak karnetu".
+    expect(pilnosc([karnet(30, "FROZEN")], now)).toBe("ZAMROZONY");
+    expect(pilnosc([karnet(2, "FROZEN")], now)).toBe("ZAMROZONY");
+  });
+
+  it("przy dwóch karnetach liczy z NAJGORSZEGO", () => {
+    // Klient z karnetem grupowym na wyczerpaniu i świeżym indywidualnym.
+    // Branie tego z dalszą datą pokazywałoby spokojny wiersz.
+    expect(pilnosc([karnet(60), karnet(2)], now)).toBe("KONCZY_SIE");
+    expect(pilnosc([karnet(2), karnet(60)], now)).toBe("KONCZY_SIE");
+  });
+
+  it("zamrożony obok czynnego nie zagłusza czynnego", () => {
+    expect(pilnosc([karnet(90, "FROZEN"), karnet(2)], now)).toBe("KONCZY_SIE");
+    expect(pilnosc([karnet(2, "FROZEN"), karnet(90)], now)).toBe("OK");
   });
 });
