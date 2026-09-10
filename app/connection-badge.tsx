@@ -41,14 +41,36 @@ export function ConnectionBadge({ className }: { className?: string }) {
         : "Zapisy idą prosto do bazy klubu. Kliknij, żeby sprawdzić połączenie."
       : "Sprawdzam, czy baza odpowiada.";
 
+  // Napis wchodzi WYŁĄCZNIE wtedy, gdy coś jest nie tak: łącze padło albo
+  // zapisy czekają w kolejce. Dopóki wszystko działa, zostaje sam kwadracik
+  // z chmurką.
+  //
+  // Powód jest z laptopa właściciela: przy stanie "wszystko gra" napis
+  // "Online · baza" zajmował około 90 px i poziome menu nagłówka nachodziło na
+  // niego przy szerokościach laptopowych. Wskaźnik, na który wjeżdża menu,
+  // przestaje być wskaźnikiem.
+  //
+  // Zielony kwadracik nie musi nic mówić: on informuje, że NIE MA problemu.
+  // Odwrotnie jest przy awarii - tam sama ikonka byłaby zgadywanką, więc napis
+  // wraca na każdej szerokości, razem z czasem od zerwania i liczbą zapisów
+  // w kolejce.
+  const zNapisem = offline || czeka > 0;
+
   return (
     <button
       type="button"
       onClick={() => void checkNow()}
       title={title}
+      // Bez tego przycisk w stanie "wszystko gra" nie ma ŻADNEJ nazwy dla
+      // czytnika ekranu: `display: none` na napisie zdejmuje go także z drzewa
+      // dostępności, a `title` jest tylko podpowiedzią myszy.
+      aria-label={label}
       aria-live="polite"
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1.5 font-mono text-[10px] tracking-widest whitespace-nowrap uppercase",
+        "flex shrink-0 items-center justify-center rounded-md border font-mono text-[10px] tracking-widest whitespace-nowrap uppercase",
+        // Kwadrat równy przełącznikowi motywu obok - inaczej w nagłówku stoją
+        // dwa prawie równe klocki i widać, że nie są równe.
+        zNapisem ? "gap-1.5 px-2 py-1.5" : "size-9",
         offline
           ? "border-red text-red bg-red/10"
           : mode === "online"
@@ -60,16 +82,13 @@ export function ConnectionBadge({ className }: { className?: string }) {
       )}
     >
       {offline ? (
-        <CloudOff className="size-3.5" />
+        <CloudOff className={zNapisem ? "size-3.5" : "size-4"} />
       ) : mode === "online" ? (
-        <Cloud className="size-3.5" />
+        <Cloud className={zNapisem ? "size-3.5" : "size-4"} />
       ) : (
-        <RefreshCw className="size-3.5" />
+        <RefreshCw className={zNapisem ? "size-3.5" : "size-4"} />
       )}
-      {/* Na telefonie sama ikona - dopóki wszystko działa. Gdy łącze padnie
-          albo coś czeka w kolejce, napis wchodzi na każdej szerokości: to jest
-          dokładnie ta chwila, w której nikt nie będzie się domyślał z ikonki. */}
-      <span className={offline || czeka > 0 ? "inline" : "hidden sm:inline"}>{label}</span>
+      {zNapisem ? <span>{label}</span> : null}
     </button>
   );
 }

@@ -180,6 +180,23 @@ czerwony (brak kontaktu). Stan liczy `lib/offline/connection.ts` z trzech
 źródeł: zdarzeń `online`/`offline` przeglądarki, wyniku każdego realnego
 zapisu i pingu `/api/zdrowie` co 20 s (co 5 s po zerwaniu).
 
+**Gdy wszystko działa, wskaźnik to sam kwadracik z chmurką** (36 px, tyle co
+przełącznik motywu obok) - bez napisu. Napis „Online · baza" zajmował około
+90 px i na laptopie właściciela poziome menu nagłówka wjeżdżało na niego:
+nawigacja ma `min-w-0`, a jej grupy `shrink-0`, więc przy zbyt małej szerokości
+wylewała się poza własne pudełko i nachodziła na sąsiada. Wskaźnik, na który
+wjeżdża menu, przestaje być wskaźnikiem.
+
+Zielony kwadracik nie musi nic mówić - on informuje, że NIE MA problemu.
+Odwrotnie jest przy awarii: przy zerwanym łączu i przy zapisach czekających
+w kolejce **napis wraca na każdej szerokości**, razem z czasem od zerwania
+i liczbą zapisów. Tam sama ikonka byłaby zgadywanką, a to jest dokładnie ta
+chwila, w której nikt nie będzie zgadywał.
+
+Przycisk ma `aria-label` ze stanem. Bez niego w stanie „wszystko gra" nie
+miałby ŻADNEJ nazwy dla czytnika ekranu: `display: none` na napisie zdejmuje go
+także z drzewa dostępności, a `title` jest tylko podpowiedzią myszy.
+
 Sam `navigator.onLine` nie wystarcza: wifi klubu bywa „jest", ale nie
 przepuszcza ruchu. Dlatego OFFLINE zapala się dopiero, gdy serwer nie
 odpowiada — a odmowa serwera (401, 403, 500) **nie** jest brakiem łącza.
