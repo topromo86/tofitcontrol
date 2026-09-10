@@ -106,12 +106,16 @@ export default async function ClientLayout({ children }: { children: React.React
         </Suspense>
       ) : null}
       <header className="border-line bg-surface border-b py-3">
-        <div className={`${PAGE_SHELL} flex items-center justify-between gap-4`}>
-          <div className="flex shrink-0 items-center gap-3">
+        {/* Odstepy mniejsze na telefonie, a lewy blok MOZE sie zwezic. Przy
+            375 px na tresc zostaje 343 px, a logo z imieniem i prawa grupa
+            kontrolek nie miescily sie w tym razem - strona jechala w bok na
+            KAZDYM ekranie tego panelu. */}
+        <div className={`${PAGE_SHELL} flex items-center justify-between gap-2 sm:gap-4`}>
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
             <BrandHeaderLogo />
             <SignedInAs name={session.user.name} />
           </div>
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             <HeaderNav groups={navGroups} />
             <ConnectionBadge />
             <ThemeToggle />

@@ -11,7 +11,8 @@ import {
   sellGiftCardAction,
 } from "./actions";
 
-const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 function promoLabel(kind: string, value: number): string {
   return kind === "PERCENT" ? `-${value}%` : `-${formatMoney(value)}`;

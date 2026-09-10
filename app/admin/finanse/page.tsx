@@ -293,7 +293,7 @@ export default async function FinansePage({
                       step="0.01"
                       placeholder="Kwota korekty (zł, może być ujemna)"
                       required
-                      className="border-line bg-surface-2 w-56"
+                      className="border-line bg-surface-2 w-full min-w-0 sm:w-56"
                     />
                     <Input
                       name="note"

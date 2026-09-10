@@ -47,7 +47,7 @@ export default async function ChurnReasonsPage() {
                 <input type="hidden" name="churnSurveyId" value={survey.id} />
                 <select
                   name="reasonId"
-                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-sm"
+                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-base md:text-sm"
                 >
                   <option value="">Bez podanego powodu</option>
                   {reasons.map((r) => (

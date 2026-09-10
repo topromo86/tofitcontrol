@@ -12,7 +12,7 @@ import { createChildAction, type ChildState } from "./actions";
 // Dziecko nie dostaje loginu ani hasła: kartoteka wisi przy koncie rodzica.
 // Dlatego nie ma tu pól e-mail i hasło, choć formularz rejestracji je ma.
 
-const SELECT = "border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm";
+const SELECT = "border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm";
 
 export function DodajDziecko({
   locations,

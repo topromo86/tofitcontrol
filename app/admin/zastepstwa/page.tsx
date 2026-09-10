@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { PROSE_WIDTH } from "../../shell";
 import { adminAssignSubstituteAction } from "./actions";
 
-const selectClass = "border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-base md:text-sm";
 
 export default async function AdminSubstitutesPage({
   searchParams,

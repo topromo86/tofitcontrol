@@ -515,7 +515,7 @@ export default async function SchedulePage({
                       <select
                         name="reason"
                         required
-                        className="border-line bg-surface-2 text-text w-40 rounded-md border px-2 py-1 text-sm"
+                        className="border-line bg-surface-2 text-text w-40 rounded-md border px-2 py-1 text-base md:text-sm"
                       >
                         <option value="INJURY">Kontuzja</option>
                         <option value="OTHER">Inny powód</option>
@@ -577,7 +577,7 @@ export default async function SchedulePage({
               <select
                 name="reason"
                 required
-                className="border-line bg-surface-2 text-text w-40 rounded-md border px-2 py-1 text-sm"
+                className="border-line bg-surface-2 text-text w-40 rounded-md border px-2 py-1 text-base md:text-sm"
               >
                 <option value="INJURY">Kontuzja</option>
                 <option value="OTHER">Inny powód</option>
@@ -589,7 +589,7 @@ export default async function SchedulePage({
                   name="until"
                   required
                   defaultValue={defaultAbsenceUntil}
-                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-sm"
+                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-base md:text-sm"
                 />
               </label>
             </div>

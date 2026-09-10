@@ -231,7 +231,8 @@ export default async function AdminMemberCardPage({
               <p className="text-muted-brand mt-0.5 text-sm">
                 {/* To jest LOGIN rodzica - czyli odpowiedź na pytanie "do którego
                     konta to dziecko jest podpięte". */}
-                Konto: <span className="text-text font-mono">{member.guardianUser.email}</span>
+                Konto:{" "}
+                <span className="text-text font-mono break-all">{member.guardianUser.email}</span>
                 {member.guardianUser.phone ? (
                   <>
                     {" · "}
@@ -328,7 +329,7 @@ export default async function AdminMemberCardPage({
                   name="childMemberId"
                   required
                   aria-label="Kartoteka dziecka"
-                  className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+                  className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm"
                 >
                   {doPrzepisania.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -750,7 +751,7 @@ export default async function AdminMemberCardPage({
                 name="sex"
                 required
                 defaultValue={member.sex ?? "FEMALE"}
-                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
               >
                 <option value="FEMALE">Kobieta</option>
                 <option value="MALE">Mężczyzna</option>
@@ -766,7 +767,7 @@ export default async function AdminMemberCardPage({
                 name="level"
                 required
                 defaultValue={member.level}
-                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
               >
                 {MEMBER_LEVELS.map((level) => (
                   <option key={level.value} value={level.value}>
@@ -782,7 +783,7 @@ export default async function AdminMemberCardPage({
                 name="status"
                 required
                 defaultValue={member.status}
-                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+                className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
               >
                 {Object.entries(STATUS_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -823,7 +824,7 @@ export default async function AdminMemberCardPage({
               name="homeLocationId"
               required
               defaultValue={member.homeLocationId}
-              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
             >
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
@@ -840,7 +841,7 @@ export default async function AdminMemberCardPage({
               name="ownerTrainerId"
               required
               defaultValue={member.ownerTrainerId}
-              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
             >
               {trainers.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -875,7 +876,7 @@ export default async function AdminMemberCardPage({
             <p className="text-text font-medium">Konto założone.</p>
             <div className="text-muted-brand mt-2 flex flex-col gap-1 font-mono text-xs">
               <span>
-                Login: <b className="text-text">{provisioned.email}</b>
+                Login: <b className="text-text break-all">{provisioned.email}</b>
               </span>
               <span>
                 Hasło tymczasowe: <b className="text-text">{provisioned.password}</b>

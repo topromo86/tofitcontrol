@@ -78,7 +78,9 @@ export default async function RetencjaPage() {
         </p>
       </div>
 
-      <section className="flex gap-8">
+      {/* Na telefonie dwie kolumny zamiast trzech w rzedzie - przy 343 px
+          etykiety nie mialy sie gdzie zmiescic. */}
+      <section className="grid grid-cols-2 gap-4 sm:flex sm:gap-8">
         <div>
           <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">Aktywni</h2>
           <p className="font-display text-3xl">{totalActive}</p>

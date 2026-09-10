@@ -8,9 +8,14 @@ export function SignedInAs({ name, role }: { name?: string | null; role?: string
   const firstName = name?.trim().split(/\s+/)[0] ?? null;
 
   return (
-    <span className="flex items-baseline gap-2 font-mono text-xs tracking-widest uppercase">
-      {role ? <span className="text-muted-brand hidden sm:inline">{role}</span> : null}
-      {firstName ? <span className="text-brand-red font-bold">{firstName}</span> : null}
+    // `min-w-0` i `truncate`: odkąd lewy blok nagłówka może się zwężać, to imię
+    // ma ustąpić pierwsze - logo i kontrolki po prawej są ważniejsze niż pełne
+    // brzmienie imienia, a i tak zwykle jest krótkie.
+    <span className="flex min-w-0 items-baseline gap-2 font-mono text-xs tracking-widest uppercase">
+      {role ? <span className="text-muted-brand hidden shrink-0 sm:inline">{role}</span> : null}
+      {firstName ? (
+        <span className="text-brand-red min-w-0 truncate font-bold">{firstName}</span>
+      ) : null}
     </span>
   );
 }

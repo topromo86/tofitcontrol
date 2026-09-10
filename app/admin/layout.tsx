@@ -98,18 +98,33 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     select: { id: true },
   });
 
-  const navGroups: HeaderNavGroup[] = NAV_GROUPS.map((group) =>
-    group.label === "Grafik"
-      ? {
-          ...group,
-          items: group.items.map((item) =>
-            item.href === "/admin/zastepstwa"
-              ? { ...item, badge: substituteAlerts || undefined }
-              : item,
-          ),
-        }
-      : group,
-  );
+  const navGroups: HeaderNavGroup[] = [
+    ...NAV_GROUPS.map((group) =>
+      group.label === "Grafik"
+        ? {
+            ...group,
+            items: group.items.map((item) =>
+              item.href === "/admin/zastepstwa"
+                ? { ...item, badge: substituteAlerts || undefined }
+                : item,
+            ),
+          }
+        : group,
+    ),
+    // Przejście do panelu trenera. Przełącznik Admin/Trener w nagłówku chowa
+    // się poniżej `md`, bo zabierał tam 140 px i wypychał stronę w bok - bez
+    // tej pozycji właściciel-trener zostałby na telefonie zamknięty w jednym
+    // panelu, bez drogi powrotnej. Warunek jest ten sam co przy przełączniku.
+    ...(ownTrainer
+      ? [
+          {
+            label: "Widok",
+            items: [{ href: "/trainer", label: "Panel trenera" }],
+            mobileOnly: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="flex min-h-full flex-1 flex-col">

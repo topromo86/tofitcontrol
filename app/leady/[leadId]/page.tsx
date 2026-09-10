@@ -30,8 +30,10 @@ import {
   updateStatusAction,
 } from "../actions";
 
-const selectClass = "border-line bg-surface-2 text-text rounded-md border px-2 py-1.5 text-sm";
-const fieldClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text rounded-md border px-2 py-1.5 text-base md:text-sm";
+const fieldClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 export default async function LeadCardPage({
   params,
@@ -85,7 +87,7 @@ export default async function LeadCardPage({
           ← Leady
         </Link>
         <h1 className="font-display text-brand-red mt-1 text-2xl tracking-wide">{lead.fullName}</h1>
-        <p className="text-muted-brand mt-1 font-mono text-xs tracking-widest uppercase">
+        <p className="text-muted-brand mt-1 font-mono text-xs tracking-widest break-words uppercase">
           {LEAD_SOURCE_LABEL[lead.source]}
           {lead.campaign ? ` · ${lead.campaign}` : ""} · zaimportowano {formatDate(lead.importedAt)}
         </p>
@@ -109,10 +111,10 @@ export default async function LeadCardPage({
             <span className="text-muted-brand">brak</span>
           )}
         </div>
-        <div>
+        <div className="min-w-0">
           <span className="text-muted-brand">E-mail: </span>
           {lead.email ? (
-            <a href={`mailto:${lead.email}`} className="text-brand-red font-medium">
+            <a href={`mailto:${lead.email}`} className="text-brand-red font-medium break-words">
               {lead.email}
             </a>
           ) : (
@@ -439,7 +441,11 @@ export default async function LeadCardPage({
             className="border-line bg-surface-2"
           />
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
+            {/* Szerokosc siedzi na opakowaniu, nie na polu: `w-48` na samym
+                Input nadpisywalo jego wlasne `w-full` (twMerge), wiec na
+                telefonie adres e-mail byl przyciety w polowie akurat wtedy,
+                gdy trzeba go sprawdzic przed wyslaniem powitania. */}
+            <div className="flex w-full flex-col gap-1 sm:w-48">
               <Label htmlFor="summaryPhone" className="font-mono text-xs tracking-widest uppercase">
                 Numer telefonu
               </Label>
@@ -449,10 +455,10 @@ export default async function LeadCardPage({
                 type="tel"
                 defaultValue={lead.phone ?? ""}
                 placeholder="+48…"
-                className="border-line bg-surface-2 w-48"
+                className="border-line bg-surface-2"
               />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex w-full flex-col gap-1 sm:w-56">
               <Label htmlFor="summaryEmail" className="font-mono text-xs tracking-widest uppercase">
                 E-mail
               </Label>
@@ -462,7 +468,7 @@ export default async function LeadCardPage({
                 type="email"
                 defaultValue={lead.email ?? ""}
                 placeholder="adres@…"
-                className="border-line bg-surface-2 w-56"
+                className="border-line bg-surface-2"
               />
             </div>
 
@@ -477,7 +483,7 @@ export default async function LeadCardPage({
                 id="zgodaSms"
                 name="zgodaSms"
                 defaultValue="BEZ_ZMIAN"
-                className="border-line bg-surface-2 text-text rounded-md border px-3 py-2 text-sm"
+                className="border-line bg-surface-2 text-text rounded-md border px-3 py-2 text-base md:text-sm"
               >
                 <option value="BEZ_ZMIAN">Bez zmian</option>
                 <option value="UDZIELONA">Potwierdził w rozmowie</option>
@@ -499,7 +505,7 @@ export default async function LeadCardPage({
                 id="welcomeChannel"
                 name="welcomeChannel"
                 defaultValue="NONE"
-                className="border-line bg-surface-2 text-text rounded-md border px-3 py-2 text-sm"
+                className="border-line bg-surface-2 text-text rounded-md border px-3 py-2 text-base md:text-sm"
               >
                 <option value="NONE">Nie wysyłaj</option>
                 <option value="SMS">SMS powitalny</option>

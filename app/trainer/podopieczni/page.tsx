@@ -29,9 +29,9 @@ export default async function PodopieczniPage() {
             <li key={m.id}>
               <Link
                 href={`/trainer/podopieczni/${m.id}`}
-                className="border-line bg-surface hover:border-brand-red flex items-center justify-between rounded-md border p-3"
+                className="border-line bg-surface hover:border-brand-red flex items-center justify-between gap-3 rounded-md border p-3"
               >
-                <div>
+                <div className="min-w-0">
                   <p className="text-text font-medium">
                     {m.firstName} {m.lastName}
                     {m.isMinor ? " (dziecko)" : ""}
@@ -41,7 +41,7 @@ export default async function PodopieczniPage() {
                     {m.goal ? m.goal : <span className="text-red">brak celu</span>}
                   </p>
                 </div>
-                <div className="text-muted-brand text-right font-mono text-xs">
+                <div className="text-muted-brand shrink-0 text-right font-mono text-xs">
                   <p>
                     {lastAttendance ? `Ostatnio: ${formatDate(lastAttendance)}` : "Brak obecności"}
                   </p>

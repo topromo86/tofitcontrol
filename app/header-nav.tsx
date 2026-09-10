@@ -10,7 +10,13 @@ export type HeaderNavItem = { href: string; label: string; badge?: number };
 
 // Grupa z jedną pozycją renderuje się jako zwykły link - najczęściej używane
 // ekrany zostają na jedno kliknięcie, a nie chowają się pod rozwijaniem.
-export type HeaderNavGroup = { label: string; items: HeaderNavItem[] };
+// `mobileOnly` wchodzi WYLACZNIE do menu pod hamburgerem, nie do poziomego
+// rzedu. Sluzy pozycjom, ktore na szerokim ekranie sa juz dostepne inaczej -
+// dzis jest to przejscie miedzy panelem wlasciciela a trenera, bo od `md` stoi
+// na nie osobny przelacznik w naglowku. Bez tego rozroznienia ta sama droga
+// zajmowalaby miejsce dwa razy, a poziomy rzad rosl az do wypchniecia strony
+// w bok na laptopie (zmierzone: 1299 px przy oknie 1280 px).
+export type HeaderNavGroup = { label: string; items: HeaderNavItem[]; mobileOnly?: boolean };
 
 // Najbardziej dopasowany (najdłuższy) href spośród tych, które są prefiksem
 // aktualnej ścieżki - unika sytuacji, w której dwa zagnieżdżone linki
@@ -95,66 +101,68 @@ export function HeaderNav({ groups }: { groups: HeaderNavGroup[] }) {
         ref={desktopNavRef}
         className="hidden min-w-0 items-center gap-4 font-mono text-xs tracking-widest uppercase lg:flex"
       >
-        {groups.map((group) => {
-          const single = group.items.length === 1 ? group.items[0] : null;
-          const groupIsActive = group.items.some((item) => item.href === activeHref);
-          const badge = groupBadge(group);
+        {groups
+          .filter((group) => !group.mobileOnly)
+          .map((group) => {
+            const single = group.items.length === 1 ? group.items[0] : null;
+            const groupIsActive = group.items.some((item) => item.href === activeHref);
+            const badge = groupBadge(group);
 
-          if (single) {
+            if (single) {
+              return (
+                <Link
+                  key={group.label}
+                  href={single.href}
+                  className={cn(
+                    "text-text hover:text-brand-red shrink-0 whitespace-nowrap",
+                    groupIsActive && "font-bold",
+                  )}
+                >
+                  {single.label}
+                  {single.badge ? <Badge value={single.badge} /> : null}
+                </Link>
+              );
+            }
+
+            const isOpen = openGroup === group.label;
             return (
-              <Link
-                key={group.label}
-                href={single.href}
-                className={cn(
-                  "text-text hover:text-brand-red shrink-0 whitespace-nowrap",
-                  groupIsActive && "font-bold",
-                )}
-              >
-                {single.label}
-                {single.badge ? <Badge value={single.badge} /> : null}
-              </Link>
+              <div key={group.label} className="relative shrink-0">
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenGroup(isOpen ? null : group.label)}
+                  className={cn(
+                    "text-text hover:text-brand-red flex items-center gap-1 whitespace-nowrap uppercase",
+                    groupIsActive && "font-bold",
+                  )}
+                >
+                  {group.label}
+                  {badge ? <Badge value={badge} /> : null}
+                  <ChevronDown
+                    className={cn("size-3 transition-transform", isOpen && "rotate-180")}
+                  />
+                </button>
+
+                {isOpen ? (
+                  <div className="border-line bg-surface absolute top-full left-0 z-50 mt-2 flex w-52 flex-col gap-1 rounded-md border p-2 shadow-lg">
+                    {group.items.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                          "text-text hover:text-brand-red hover:bg-surface-2 rounded-md px-3 py-2",
+                          item.href === activeHref && "font-bold",
+                        )}
+                      >
+                        {item.label}
+                        {item.badge ? <Badge value={item.badge} /> : null}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             );
-          }
-
-          const isOpen = openGroup === group.label;
-          return (
-            <div key={group.label} className="relative shrink-0">
-              <button
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => setOpenGroup(isOpen ? null : group.label)}
-                className={cn(
-                  "text-text hover:text-brand-red flex items-center gap-1 whitespace-nowrap uppercase",
-                  groupIsActive && "font-bold",
-                )}
-              >
-                {group.label}
-                {badge ? <Badge value={badge} /> : null}
-                <ChevronDown
-                  className={cn("size-3 transition-transform", isOpen && "rotate-180")}
-                />
-              </button>
-
-              {isOpen ? (
-                <div className="border-line bg-surface absolute top-full left-0 z-50 mt-2 flex w-52 flex-col gap-1 rounded-md border p-2 shadow-lg">
-                  {group.items.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "text-text hover:text-brand-red hover:bg-surface-2 rounded-md px-3 py-2",
-                        item.href === activeHref && "font-bold",
-                      )}
-                    >
-                      {item.label}
-                      {item.badge ? <Badge value={item.badge} /> : null}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+          })}
       </nav>
 
       <details ref={mobileRef} className="relative lg:hidden">

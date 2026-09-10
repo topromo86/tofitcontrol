@@ -11,7 +11,8 @@ const initialState: ProfileState = {};
 
 const fieldClass = "border-line bg-surface-2";
 const labelClass = "font-mono text-xs tracking-widest uppercase";
-const selectClass = "border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm";
 
 type Option = { id: string; name: string };
 

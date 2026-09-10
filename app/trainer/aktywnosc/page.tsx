@@ -49,7 +49,7 @@ export default async function TrainerActivityPage({
         <select
           name="sort"
           defaultValue={sortDir}
-          className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-sm"
+          className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-base md:text-sm"
         >
           <option value="desc">Najnowsze pierwsze</option>
           <option value="asc">Najstarsze pierwsze</option>

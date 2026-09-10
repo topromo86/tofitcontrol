@@ -370,32 +370,45 @@ export default async function AdminDashboardPage() {
                     {s.trainer.user.phone ? ` · ${formatPhone(s.trainer.user.phone)}` : ""}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                {/* Akcje: na telefonie pod spodem, przez całą szerokość karty.
+                    Wcześniej ten pojemnik miał `shrink-0`, a pole komentarza
+                    sztywne `w-48` - "Zadzwoń" (88 px) + pole (192 px) +
+                    "Wyjaśnione" (104 px) plus odstępy to około 400 px przy
+                    317 px dostępnych w karcie, więc przycisk zatwierdzenia
+                    wyjeżdżał poza ekran i alertu nie dało się wyciszyć
+                    z telefonu. */}
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                   {/* Numer jako odnośnik tel: - na telefonie właściciela to jedno
                       dotknięcie zamiast przepisywania cyfr. */}
                   {s.trainer.user.phone ? (
                     <a
                       href={`tel:${s.trainer.user.phone}`}
-                      className="border-amber text-amber hover:bg-amber/10 rounded-md border px-3 py-1.5 font-mono text-xs tracking-widest uppercase"
+                      className="border-amber text-amber hover:bg-amber/10 flex h-11 shrink-0 items-center rounded-md border px-3 font-mono text-xs tracking-widest uppercase sm:h-8"
                     >
                       Zadzwoń
                     </a>
                   ) : (
-                    <span className="text-muted-brand font-mono text-xs">brak numeru</span>
+                    <span className="text-muted-brand shrink-0 font-mono text-xs">brak numeru</span>
                   )}
                   {/* Po sprawdzeniu alert ma zniknąć. Komentarz jest opcjonalny -
                       wymuszanie pisania przy każdym wyciszeniu skończyłoby się
                       wpisywaniem kropki. Ślad w historii zostaje tak czy tak. */}
-                  <form action={waiveTrainerCheckInAction} className="flex items-center gap-2">
+                  <form
+                    action={waiveTrainerCheckInAction}
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                  >
                     <input type="hidden" name="sessionId" value={s.id} />
+                    {/* `text-base` do sm, bo poniżej 16 px Safari na iOS
+                        powiększa stronę przy dotknięciu pola i zostawia ją
+                        przesuniętą w bok. */}
                     <input
                       name="note"
-                      placeholder="Co ustaliłeś? (opcjonalnie)"
-                      className="border-line bg-surface-2 text-text h-8 w-48 rounded-md border px-2 text-xs"
+                      placeholder="Co ustaliłeś?"
+                      className="border-line bg-surface-2 text-text h-11 min-w-0 flex-1 rounded-md border px-2 text-base sm:h-8 sm:w-48 sm:flex-none sm:text-xs"
                     />
                     <button
                       type="submit"
-                      className="border-line text-muted-brand hover:text-text hover:border-text rounded-md border px-3 py-1.5 font-mono text-xs tracking-widest uppercase"
+                      className="border-line text-muted-brand hover:text-text hover:border-text flex h-11 shrink-0 items-center rounded-md border px-3 font-mono text-xs tracking-widest uppercase sm:h-8"
                     >
                       Wyjaśnione
                     </button>

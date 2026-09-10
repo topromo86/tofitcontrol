@@ -29,7 +29,8 @@ import {
   setTrainerRateAction,
 } from "./actions";
 
-const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 function isoDate(d: { year: number; month: number; day: number }): string {
   return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
@@ -377,10 +378,17 @@ export default async function AdminPayrollPage({
                 {cost.note ? <p className="text-muted-brand mt-1 text-sm">{cost.note}</p> : null}
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Na telefonie ten rzad zawija sie i pole daty bierze cala
+                  szerokosc. Wczesniej kwota, pole `w-36` i dwa przyciski
+                  potrzebowaly okolo 380 px przy 317 px w karcie, wiec "Usun"
+                  wyjezdzal poza ekran. */}
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
                 <span className="font-display text-xl">{formatMoney(cost.amountGross)}</span>
                 {cost.kind === "RECURRING_MONTHLY" && !cost.endsOn ? (
-                  <form action={endCostAction} className="flex items-center gap-1">
+                  <form
+                    action={endCostAction}
+                    className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none sm:gap-1"
+                  >
                     <input type="hidden" name="costId" value={cost.id} />
                     <input type="hidden" name="month" value={selectedKey} />
                     <Input
@@ -388,7 +396,7 @@ export default async function AdminPayrollPage({
                       type="date"
                       required
                       aria-label="Zakończ z dniem"
-                      className="border-line bg-surface-2 h-8 w-36"
+                      className="border-line bg-surface-2 h-11 min-w-0 flex-1 sm:h-8 sm:w-36 sm:flex-none"
                     />
                     <Button type="submit" size="sm" variant="outline">
                       Zakończ

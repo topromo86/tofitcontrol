@@ -21,8 +21,8 @@ export default async function KasaPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <p className="text-muted-brand text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-muted-brand min-w-0 text-sm">
           Dzienne rozliczenie gotówki per lokalizacja. Rozbieżność między kwotą oczekiwaną a
           policzoną wymaga notatki.
         </p>

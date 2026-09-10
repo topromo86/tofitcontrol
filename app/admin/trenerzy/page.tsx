@@ -10,7 +10,8 @@ import { formatDate } from "@/lib/format";
 import { createTrainerAction } from "./actions";
 import { TrainerAvatar } from "./trainer-avatar";
 
-const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 export default async function AdminTrainersPage({
   searchParams,

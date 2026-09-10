@@ -23,7 +23,8 @@ import {
   examState,
 } from "@/lib/domain/medical-exam";
 
-const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 export default async function TrainerDetailPage({
   params,
@@ -68,11 +69,15 @@ export default async function TrainerDetailPage({
             hasPhoto={trainer.photoMimeType != null}
             size={72}
           />
-          <div>
+          {/* `min-w-0` na kolumnie i `break-all` na adresie: bez nich minimalna
+              szerokosc tej kolumny rowna sie dlugosci calego adresu e-mail
+              (to jeden ciag bez spacji), wiec wiersz nie mial jak sie zwezic
+              i wypychal strone w bok. */}
+          <div className="min-w-0">
             <h1 className="font-display text-brand-red text-2xl tracking-wide">
               {trainer.user.name}
             </h1>
-            <p className="text-muted-brand mt-1 font-mono text-xs tracking-widest uppercase">
+            <p className="text-muted-brand mt-1 font-mono text-xs tracking-widest break-all uppercase">
               {trainer.locations.length > 0
                 ? trainer.locations.map((l) => l.name).join(", ")
                 : trainer.location.name}{" "}

@@ -13,7 +13,8 @@ import {
 import { collectHandoverItems, eligibleHandoverTrainers } from "@/lib/services/trainer";
 import { deactivateTrainerAction } from "../../actions";
 
-const selectClass = "border-line bg-surface-2 text-text rounded-md border px-2 py-1.5 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text rounded-md border px-2 py-1.5 text-base md:text-sm";
 
 const KIND_ORDER: HandoverItemKind[] = ["MEMBER", "SESSION", "TEMPLATE", "TASK"];
 

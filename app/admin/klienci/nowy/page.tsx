@@ -46,7 +46,7 @@ export default async function NewClientPage() {
               id="sex"
               name="sex"
               required
-              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+              className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
             >
               <option value="FEMALE">Kobieta</option>
               <option value="MALE">Mężczyzna</option>
@@ -88,7 +88,7 @@ export default async function NewClientPage() {
             id="homeLocationId"
             name="homeLocationId"
             required
-            className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+            className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
           >
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
@@ -105,7 +105,7 @@ export default async function NewClientPage() {
             name="ownerTrainerId"
             required
             defaultValue=""
-            className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm"
+            className="border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm"
           >
             <option value="" disabled>
               Wybierz trenera...

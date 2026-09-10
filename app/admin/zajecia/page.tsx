@@ -39,7 +39,8 @@ import {
   updateSessionAction,
 } from "./actions";
 
-const selectClass = "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-sm";
+const selectClass =
+  "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
 
 function durationMinutes(startsAt: Date, endsAt: Date): number {
   return Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000);
@@ -310,7 +311,7 @@ export default async function AdminSessionsPage({
                     name="color"
                     defaultValue={category.color ?? ""}
                     aria-label="Kolor na grafiku"
-                    className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+                    className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm"
                   >
                     <option value="">Kolor: automatyczny</option>
                     {CATEGORY_COLORS.map((c) => (

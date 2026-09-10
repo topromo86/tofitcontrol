@@ -18,8 +18,10 @@ const STATUS_STYLE: Record<string, string> = {
   ACTIVE: "text-jade",
 };
 
-const SELECT = "border-line bg-surface-2 text-text rounded-md border px-2 py-2 text-sm";
-const SELECT_SM = "border-line bg-surface text-text h-9 rounded-md border px-2 text-sm";
+const SELECT =
+  "border-line bg-surface-2 text-text rounded-md border px-2 py-2 text-base md:text-sm";
+const SELECT_SM =
+  "border-line bg-surface text-text h-9 rounded-md border px-2 text-base md:text-sm";
 
 export type PaymentsPlan = {
   id: string;

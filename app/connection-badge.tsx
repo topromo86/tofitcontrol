@@ -70,7 +70,18 @@ export function ConnectionBadge({ className }: { className?: string }) {
         "flex shrink-0 items-center justify-center rounded-md border font-mono text-[10px] tracking-widest whitespace-nowrap uppercase",
         // Kwadrat równy przełącznikowi motywu obok - inaczej w nagłówku stoją
         // dwa prawie równe klocki i widać, że nie są równe.
-        zNapisem ? "gap-1.5 px-2 py-1.5" : "size-9",
+        // Napis wchodzi dopiero od `md`, a nie od razu przy awarii.
+        // Na telefonie rozdmuchiwal naglowek z 36 px do ponad 200 px
+        // i wypychal strone w bok DOKLADNIE w chwili, gdy padlo wifi -
+        // czyli wtedy, gdy panel jest najbardziej potrzebny.
+        // Nic przez to nie ginie: pelny komunikat ("Brak polaczenia z baza
+        // klubu", czas od zerwania, kolejka) stoi w pasie OfflineBar tuz nad
+        // trescia, a przycisk niesie go w `aria-label` i `title`.
+        // Prog to `md`, nie `sm`: przy 640 px naglowek z napisem nadal
+        // wypycha strone.
+        zNapisem
+          ? "size-9 md:h-auto md:w-auto md:gap-1.5 md:px-2 md:py-1.5 lg:size-9 lg:gap-0 lg:p-0 2xl:h-auto 2xl:w-auto 2xl:gap-1.5 2xl:px-2 2xl:py-1.5"
+          : "size-9",
         offline
           ? "border-red text-red bg-red/10"
           : mode === "online"
@@ -82,13 +93,19 @@ export function ConnectionBadge({ className }: { className?: string }) {
       )}
     >
       {offline ? (
-        <CloudOff className={zNapisem ? "size-3.5" : "size-4"} />
+        <CloudOff className={zNapisem ? "size-4 md:size-3.5 lg:size-4 2xl:size-3.5" : "size-4"} />
       ) : mode === "online" ? (
-        <Cloud className={zNapisem ? "size-3.5" : "size-4"} />
+        <Cloud className={zNapisem ? "size-4 md:size-3.5 lg:size-4 2xl:size-3.5" : "size-4"} />
       ) : (
-        <RefreshCw className={zNapisem ? "size-3.5" : "size-4"} />
+        <RefreshCw className={zNapisem ? "size-4 md:size-3.5 lg:size-4 2xl:size-3.5" : "size-4"} />
       )}
-      {zNapisem ? <span>{label}</span> : null}
+      {/* Napis pojawia sie TAM, GDZIE JEST NA NIEGO MIEJSCE, a nie wszedzie
+          powyzej jednego progu. Miedzy `lg` a `xl` naglowek rozwija poziome
+          menu na cala szerokosc i wtedy napis znow wypychal strone (zmierzone:
+          1299 px przy oknie 1280 px). Wraca dopiero od `2xl`, gdzie mieszcza sie
+          oba. Ponizej `md` nie ma go z tego samego powodu co na telefonie:
+          pelny komunikat i tak stoi w pasie OfflineBar nad trescia. */}
+      {zNapisem ? <span className="hidden md:inline lg:hidden 2xl:inline">{label}</span> : null}
     </button>
   );
 }

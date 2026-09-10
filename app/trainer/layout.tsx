@@ -68,17 +68,33 @@ export default async function TrainerLayout({ children }: { children: React.Reac
       label: "Stacja",
       items: [{ href: "/kod-zajec", label: "Kod na zajęcia" }],
     },
+    // Przejscie do panelu wlasciciela. Przelacznik Admin/Trener w naglowku
+    // chowa sie ponizej `md`, wiec bez tej pozycji Daniel zostalby na
+    // telefonie zamkniety w jednym panelu, bez drogi powrotnej.
+    ...(session.user.role === "ADMIN"
+      ? [
+          {
+            label: "Widok",
+            items: [{ href: "/admin", label: "Panel właściciela" }],
+            mobileOnly: true,
+          },
+        ]
+      : []),
   ];
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-line bg-surface border-b py-3">
-        <div className={`${PAGE_SHELL} flex items-center justify-between gap-4`}>
-          <div className="flex shrink-0 items-center gap-3">
+        {/* Odstepy mniejsze na telefonie, a lewy blok MOZE sie zwezic. Przy
+            375 px na tresc zostaje 343 px, a logo z imieniem i prawa grupa
+            kontrolek nie miescily sie w tym razem - strona jechala w bok na
+            KAZDYM ekranie tego panelu. */}
+        <div className={`${PAGE_SHELL} flex items-center justify-between gap-2 sm:gap-4`}>
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
             <BrandHeaderLogo />
             <SignedInAs role="Trener" name={session.user.name} />
           </div>
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             <HeaderNav groups={navGroups} />
             <ConnectionBadge />
             {session.user.role === "ADMIN" ? <AccountViewSwitch current="trainer" /> : null}

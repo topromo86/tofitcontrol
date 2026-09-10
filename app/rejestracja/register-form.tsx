@@ -111,7 +111,7 @@ export function RegisterForm({
                 name="sex"
                 required
                 defaultValue=""
-                className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+                className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm"
               >
                 <option value="" disabled>
                   Wybierz
@@ -131,7 +131,7 @@ export function RegisterForm({
               name="homeLocationId"
               required
               defaultValue=""
-              className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+              className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm"
             >
               <option value="" disabled>
                 Wybierz lokalizację
@@ -153,7 +153,7 @@ export function RegisterForm({
               name="ownerTrainerId"
               required
               defaultValue=""
-              className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-sm"
+              className="border-line bg-surface-2 text-text h-9 rounded-md border px-2 text-base md:text-sm"
             >
               <option value="" disabled>
                 Wybierz trenera

@@ -31,13 +31,15 @@ export default async function SparringPage() {
           {pairs.map(([a, b]) => (
             <li
               key={`${a.id}-${b.id}`}
-              className="border-line bg-surface flex items-center justify-between rounded-md border p-3"
+              // Na telefonie para staje w kolumnie: dwa nazwiska z waga nie
+              // miescily sie w jednym wierszu i wypychaly karte poza ekran.
+              className="border-line bg-surface flex flex-col gap-1 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             >
-              <span className="text-text">
+              <span className="text-text min-w-0">
                 {a.firstName} {a.lastName} ({a.weightKg} kg)
               </span>
-              <span className="text-muted-brand font-mono text-xs">vs</span>
-              <span className="text-text">
+              <span className="text-muted-brand shrink-0 font-mono text-xs">vs</span>
+              <span className="text-text min-w-0">
                 {b.firstName} {b.lastName} ({b.weightKg} kg)
               </span>
             </li>

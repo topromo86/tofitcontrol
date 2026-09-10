@@ -15,17 +15,21 @@ export default async function LeadsLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="border-line bg-surface border-b py-3">
-        <div className={`${PAGE_SHELL} flex items-center justify-between gap-4`}>
-          <div className="flex shrink-0 items-center gap-3">
+        {/* Odstepy mniejsze na telefonie, a lewy blok MOZE sie zwezic. Przy
+            375 px na tresc zostaje 343 px, a logo z imieniem i prawa grupa
+            kontrolek nie miescily sie w tym razem - strona jechala w bok na
+            KAZDYM ekranie tego panelu. */}
+        <div className={`${PAGE_SHELL} flex items-center justify-between gap-2 sm:gap-4`}>
+          <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
             <BrandHeaderLogo />
-            <span className="text-muted-brand font-mono text-xs tracking-widest uppercase">
+            <span className="text-muted-brand truncate font-mono text-xs tracking-widest uppercase">
               Leady · CRM
             </span>
           </div>
-          <div className="flex min-w-0 items-center gap-4">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
             <Link
               href={backHref}
-              className="text-muted-brand hover:text-brand-red font-mono text-xs tracking-widest uppercase"
+              className="text-muted-brand hover:text-brand-red font-mono text-xs tracking-widest whitespace-nowrap uppercase"
             >
               ← Panel
             </Link>

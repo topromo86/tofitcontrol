@@ -210,7 +210,10 @@ export default async function LeadsListPage({
                       {LEAD_STATUS_LABEL[lead.status]}
                     </span>
                   </p>
-                  <p className="text-muted-brand mt-0.5 font-mono text-xs">
+                  {/* `break-words`: e-mail i nazwa kampanii z Meta to ciagi bez spacji
+                      (podkreslnik NIE jest miejscem lamania w CSS), wiec bez tego
+                      wylewaly sie poza karte i przewijaly strone. */}
+                  <p className="text-muted-brand mt-0.5 font-mono text-xs break-words">
                     {lead.phone ? (
                       <a href={`tel:${lead.phone}`} className="hover:text-brand-red">
                         {lead.phone}

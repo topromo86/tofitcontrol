@@ -10,8 +10,12 @@ export function AccountViewSwitch({ current }: { current: "admin" | "trainer" })
   const active = "bg-brand-red text-white";
   const idle = "text-muted-brand hover:text-brand-red";
   return (
+    // Ponizej `md` przelacznik jest schowany: w naglowku telefonu zabieral
+    // 140 px i wypychal strone w bok. Przejscie miedzy panelami nie znika -
+    // wchodzi wtedy do menu (grupa "Widok" w naglowku obu paneli), wiec na
+    // telefonie jest o jedno dotkniecie dalej, a nie niedostepne.
     <div
-      className="border-line flex items-center gap-0.5 rounded-md border p-0.5"
+      className="border-line hidden items-center gap-0.5 rounded-md border p-0.5 md:flex"
       title="Przełącz widok: administrator / trener"
     >
       <Link href="/admin" className={`${item} ${current === "admin" ? active : idle}`}>

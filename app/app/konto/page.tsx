@@ -66,7 +66,7 @@ export default async function AccountPage({
           Dane kontaktowe
         </h2>
         <p className="text-muted-brand text-sm">
-          E-mail: <span className="text-text font-mono">{konto.email}</span>
+          E-mail: <span className="text-text font-mono break-all">{konto.email}</span>
         </p>
         {tel === "ok" ? (
           <p className="border-jade/40 bg-jade/10 text-text rounded-md border p-3 text-sm">
@@ -147,7 +147,7 @@ export default async function AccountPage({
                 key={r.id}
                 className="border-line bg-surface flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
               >
-                <span className="text-text text-sm">{r.childEmail}</span>
+                <span className="text-text min-w-0 text-sm break-all">{r.childEmail}</span>
                 <span
                   className={`font-mono text-xs ${
                     r.status === "REJECTED" ? "text-red" : "text-amber"

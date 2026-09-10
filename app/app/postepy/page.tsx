@@ -97,7 +97,7 @@ export default async function ProgressPage({
         <h2 className="text-muted-brand font-mono text-xs tracking-widest uppercase">
           Frekwencja (ostatnie {WEEKS_BACK} tygodni)
         </h2>
-        <div className="border-line bg-surface mt-2 flex items-end gap-1 rounded-md border p-4">
+        <div className="border-line bg-surface mt-2 flex items-end gap-1 overflow-x-auto rounded-md border p-4">
           {buckets.map((b) => (
             <div
               key={`${b.weekStart.year}-${b.weekStart.month}-${b.weekStart.day}`}

@@ -326,7 +326,7 @@ export default async function TrainerTodayPage() {
                 <select
                   name="substituteTrainerId"
                   defaultValue={s.substituteTrainerId ?? ""}
-                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-sm"
+                  className="border-line bg-surface-2 text-text rounded-md border px-2 py-1 text-base md:text-sm"
                 >
                   {/* Pusta wartość wycofuje zastępstwo - bez niej nie dałoby
                       się odwołać własnej prośby. */}
@@ -345,11 +345,14 @@ export default async function TrainerTodayPage() {
 
             <form action={cancelSessionAction} className="flex items-center gap-2">
               <input type="hidden" name="sessionId" value={s.id} />
+              {/* Bez `text-sm`: komponent Input ma własne `text-base md:text-sm`,
+                  a wpisane tu `text-sm` je nadpisywało - a pole poniżej 16 px
+                  powoduje na iOS powiększenie całej strony przy dotknięciu. */}
               <Input
                 name="reason"
                 placeholder="Powód odwołania"
                 required
-                className="border-line bg-surface-2 h-8 w-48 text-sm"
+                className="border-line bg-surface-2 h-11 w-full min-w-0 sm:h-8 sm:w-48"
               />
               <Button type="submit" variant="destructive" size="sm">
                 Odwołaj zajęcia

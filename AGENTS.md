@@ -1324,6 +1324,79 @@ korzysta z `requireSessionRaw`, żeby nie odsyłał sam do siebie. Wpisanie z
 powrotem hasła otrzymanego od klubu jest odrzucane - wtedy nadal znałoby je
 dwoje ludzi.
 
+## Telefon jest gluwnym ekranem, nie wersja zapasowa
+
+Trenerzy pracuja na sali z telefonem w jednej rece, a klubowicz nie otwiera
+`/app` na niczym innym. **Nic nie ma prawa sie ucinac ani wypychac strony
+w bok.** Twardy test jest jeden i nie ma od niego wyjatkow:
+
+```js
+document.documentElement.scrollWidth === document.documentElement.clientWidth;
+```
+
+Rachunek, ktory warto miec w glowie przy pisaniu ekranu: przy 375 px na tresc
+zostaje **343 px** (`PAGE_SHELL` ma `px-4`), a wewnatrz karty z `p-3` juz tylko
+**317 px**. Przycisk w `font-mono text-xs uppercase` z `px-3` to okolo 8 px na
+znak plus 24 px paddingu, numer telefonu w `font-mono text-xs` to okolo 108 px.
+
+### Wzorce, ktore to psuja
+
+| wzorzec | dlaczego wywala |
+| --- | --- |
+| `shrink-0` na POJEMNIKU z kilkoma kontrolkami | caly blok nie ma jak sie zwezic, wiec wychodzi poza ekran w calosci |
+| sztywne `w-48` / `w-56` na polu | `twMerge` PODMIENIA tym `w-full` z komponentu `Input`, a nie dokleja |
+| `<select>` bez `w-full min-w-0` | mierzy sie NAJDLUZSZA opcja i sam przewija strone |
+| flex z `truncate` w dziecku bez `min-w-0` | `truncate` wtedy nie dziala, bo minimum dziecka to jego pelna tresc |
+| e-mail / nazwa kampanii bez `break-all` | to jeden ciag bez spacji; podkreslnik NIE jest miejscem lamania w CSS |
+| `text-sm` (14 px) na polu formularza | **Safari na iOS powieksza cala strone przy dotknieciu i z tego nie schodzi** |
+| `<table>` bez rodzica z `overflow-x-auto` | tabela rozpycha strone zamiast przewijac sie u siebie |
+
+Prymitywy `components/ui/input.tsx` i `textarea.tsx` maja juz poprawne
+`text-base ... md:text-sm` - to one sa wzorcem. Recznie pisane `<select>`
+i `<input>` musza go powtarzac; inline `text-sm` na `<Input>` **nadpisuje**
+prymityw i wraca problem z iOS.
+
+Cel dotykowy to `h-11` (44 px) tam, gdzie sie klika palcem - ale **nie na sile**:
+pole stojace w jednym rzedzie z `Input` o wysokosci `h-8` ma zostac przy `h-8`,
+inaczej w wierszu stoja obok siebie klocki 44 i 32 px.
+
+### Naglowek panelu ma sie zwezac
+
+Wszystkie cztery naglowki (`/admin`, `/trainer`, `/app`, `/leady`) maja ten sam
+uklad: lewy blok `min-w-0 shrink` (logo + imie), prawy `shrink-0` (kontrolki),
+odstepy `gap-2 sm:gap-4`. Logo ma **wlasne** `shrink-0` w
+`app/brand-header-logo.tsx` - bez tego Tailwindowe `img{max-width:100%}`
+scisneloby je do zera zamiast przyciac imie obok.
+
+**Wskaznik polaczenia pokazuje napis tylko tam, gdzie jest na niego miejsce**
+(`hidden md:inline lg:hidden 2xl:inline`). Miedzy `lg` a `xl` naglowek rozwija
+poziome menu i napis znow wypychal strone. Nic przez to nie ginie: pelny
+komunikat stoi w pasie `OfflineBar` nad trescia, a przycisk niesie go
+w `aria-label` i `title`.
+
+**Przelacznik Admin/Trener chowa sie ponizej `md`** - zabieral 140 px. Przejscie
+miedzy panelami nie znika: wchodzi do menu jako grupa `Widok`, oznaczona
+`mobileOnly: true`. Ta flaga istnieje po to, zeby pozycja weszla WYLACZNIE do
+menu pod hamburgerem, a nie do poziomego rzedu - bez niej rzad rosl az do
+wypchniecia strony na laptopie (zmierzone: 1299 px przy oknie 1280 px).
+
+### Czego NIE robic
+
+- **nigdy `overflow-x: hidden` na `html`/`body`** jako plaster. To ukrywa objaw
+  i sprawia, ze kazdy nastepny taki blad wchodzi niezauwazony,
+- nie zmniejszac czcionek, zeby cos zmiescic - piksele biora sie z usunietych
+  linii i chromu, nie z drobniejszego pisma,
+- nie chowac tresci pod breakpointem bez zapasowej drogi. Jesli cos znika na
+  telefonie, musi byc dostepne inaczej (menu, karta, rozwiniecie).
+
+### Co zostalo
+
+Poziomy rzad menu wlacza sie od `lg` (1024 px), a naglowek `/admin` z rekordem
+trenera potrzebuje 1173 px. W oknie 1024-1173 px strona nadal jedzie w bok.
+Naprawa to przesuniecie progu z `lg` na `xl` w `app/header-nav.tsx`, ale zabiera
+to pelne menu wszystkim miedzy 1024 a 1280 px - decyzja o nawigacji, nie
+o wygladzie, wiec czeka na osobna prosbe.
+
 ## Kontrole przed wysłaniem
 
 CI na GitHubie sprawdza cztery rzeczy: `format:check`, `lint`, `typecheck`,
