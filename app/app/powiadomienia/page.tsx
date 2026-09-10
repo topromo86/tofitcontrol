@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAccessibleMembers, requireSession } from "@/lib/auth/guard";
 import { visibleTypes, wantsNotification } from "@/lib/domain/notification";
 import { getPreferences } from "@/lib/services/notification";
-import { isEmailConfigured } from "@/lib/services/notify";
+import { isEmailConfigured, isSmsConfigured } from "@/lib/services/notify";
 import { Button } from "@/components/ui/button";
 import { PROSE_WIDTH } from "../../shell";
 import { PushSubscribeButton } from "./push-subscribe-button";
@@ -29,9 +29,9 @@ export default async function NotificationSettingsPage({
   const types = visibleTypes(isGuardian);
 
   const pushReady = user.pushSubscription != null;
-  // Klub nie ma jeszcze dostawcy SMS (lib/services/notify.ts) - mówimy o tym
-  // wprost, zamiast pozwolić klientowi włączyć przełącznik, który nic nie robi.
-  const smsAvailable = Boolean(process.env.SMS_PROVIDER_API_KEY);
+  // Gdy bramka SMS nie jest podłączona, mówimy o tym wprost, zamiast pozwolić
+  // klientowi włączyć przełącznik, który nic nie robi.
+  const smsAvailable = isSmsConfigured();
   const emailAvailable = isEmailConfigured();
 
   return (

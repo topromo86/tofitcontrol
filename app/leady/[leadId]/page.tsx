@@ -8,6 +8,13 @@ import {
   LEAD_STATUS_ORDER,
   splitFullName,
 } from "@/lib/domain/lead-import";
+import {
+  SMS_CONSENT_LABEL,
+  SMS_CONSENT_SCRIPT,
+  SMS_CONSENT_STYLE,
+  smsConsentState,
+} from "@/lib/domain/contact-consent";
+import { smsConsentHistory } from "@/lib/services/contact-consent";
 import { formatDate, formatDayTime } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +44,7 @@ export default async function LeadCardPage({
   const { leadId } = await params;
   const { blad } = await searchParams;
 
-  const [lead, assignees, locations, trainers] = await Promise.all([
+  const [lead, assignees, locations, trainers, zgodySms] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: leadId },
       include: {
@@ -61,8 +68,12 @@ export default async function LeadCardPage({
       include: { user: true, location: true },
       orderBy: { user: { name: "asc" } },
     }),
+    smsConsentHistory({ leadId }),
   ]);
   if (!lead) notFound();
+
+  const stanZgody = smsConsentState(zgodySms);
+  const ostatniaZgoda = zgodySms[0] ?? null;
 
   const raw = (lead.rawData ?? {}) as Record<string, string>;
   const suggestedName = splitFullName(lead.fullName);
@@ -134,6 +145,53 @@ export default async function LeadCardPage({
             </dl>
           </details>
         ) : null}
+      </section>
+
+      {/* Zgoda na kanał SMS. Osobno od danych kontaktowych, bo to nie jest dana
+          kontaktowa, tylko odpowiedź na pytanie "czy wolno tam napisać". */}
+      <section className="border-line bg-surface flex flex-col gap-2 rounded-md border p-4 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`font-mono text-xs tracking-widest uppercase ${SMS_CONSENT_STYLE[stanZgody]}`}
+          >
+            {SMS_CONSENT_LABEL[stanZgody]}
+          </span>
+          {ostatniaZgoda ? (
+            <span className="text-muted-brand text-xs">
+              · {formatDayTime(ostatniaZgoda.grantedAt)}
+              {ostatniaZgoda.source === "META_LEAD_ADS"
+                ? " · formularz kampanii"
+                : ostatniaZgoda.source === "ROZMOWA_TELEFONICZNA"
+                  ? " · rozmowa telefoniczna"
+                  : ""}
+            </span>
+          ) : null}
+        </div>
+        {ostatniaZgoda ? (
+          <details>
+            <summary className="text-muted-brand cursor-pointer text-xs">
+              Na co dokładnie zgodził się ten kontakt ({zgodySms.length}{" "}
+              {zgodySms.length === 1 ? "wpis" : "wpisy"})
+            </summary>
+            <ul className="mt-2 flex flex-col gap-2">
+              {zgodySms.map((z) => (
+                <li key={z.id} className="border-line bg-surface-2 rounded-md border p-2 text-xs">
+                  <p className={z.granted ? "text-jade" : "text-red"}>
+                    {z.granted ? "Zgoda udzielona" : "Zgoda wycofana"} ·{" "}
+                    {formatDayTime(z.grantedAt)}
+                  </p>
+                  <p className="text-text mt-1 whitespace-pre-wrap">{z.textSnapshot}</p>
+                  {z.note ? <p className="text-muted-brand mt-1">{z.note}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : (
+          <p className="text-muted-brand text-xs">
+            Ten kontakt nie ma zapisanej zgody na SMS - powstał, zanim system zaczął ją zapisywać.
+            Potwierdź ją w rozmowie i zaznacz niżej przy podsumowaniu.
+          </p>
+        )}
       </section>
 
       {/* Konwersja lead -> klient (Etap 2) */}
@@ -408,6 +466,25 @@ export default async function LeadCardPage({
               />
             </div>
 
+            {/* Zgoda na SMS z rozmowy. Trzy stany, nie checkbox: "nie
+                zaznaczone" musi znaczyć "nie pytałem", a nie "odmówił" -
+                inaczej każda rozmowa bez tego kliknięcia zamykałaby kanał. */}
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="zgodaSms" className="font-mono text-xs tracking-widest uppercase">
+                Zgoda na SMS
+              </Label>
+              <select
+                id="zgodaSms"
+                name="zgodaSms"
+                defaultValue="BEZ_ZMIAN"
+                className="border-line bg-surface-2 text-text rounded-md border px-3 py-2 text-sm"
+              >
+                <option value="BEZ_ZMIAN">Bez zmian</option>
+                <option value="UDZIELONA">Potwierdził w rozmowie</option>
+                <option value="WYCOFANA">Prosi o zaprzestanie</option>
+              </select>
+            </div>
+
             {/* Powitanie jako wybór kanału, nie checkbox: klub ma dziś czynną
                 pocztę, a bramkę SMS dopiero podepnie - i tak samo bywa
                 z leadem, który zostawił tylko jedną daną kontaktową. */}
@@ -435,6 +512,12 @@ export default async function LeadCardPage({
             Podsumowanie zapisze się w notatkach i będzie widoczne także z karty klienta po
             założeniu konta. Powitanie wychodzi po zapisaniu notatki - jeśli bramka SMS albo poczta
             nie są podłączone, notatka i tak zostanie, a nieudana próba trafi do historii kontaktu.
+          </p>
+          <p className="text-muted-brand text-xs">
+            Gdy rozmówca sam wróci do tematu wiadomości, wystarczy zapytać:{" "}
+            <span className="text-text">&bdquo;{SMS_CONSENT_SCRIPT}&rdquo;</span> Odmowa jest tak
+            samo warta zapisania jak zgoda - chroni przed wysłaniem czegoś, czego ktoś sobie nie
+            życzy.
           </p>
           <Button type="submit" size="sm" className="self-start">
             Zapisz podsumowanie

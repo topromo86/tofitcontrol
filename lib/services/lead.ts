@@ -7,6 +7,9 @@ import {
   leadIdentity,
   parseLeadsCsv,
 } from "@/lib/domain/lead-import";
+import { buildLeadConsentText } from "@/lib/domain/contact-consent";
+import { recordContactConsent } from "@/lib/services/contact-consent";
+import { getClubSettings } from "@/lib/services/settings";
 
 type Tx = PrismaClient | Prisma.TransactionClient;
 
@@ -58,6 +61,12 @@ export async function importLeadsFromCsv(input: {
   actorUserId: string;
 }): Promise<ImportResult> {
   const { leads, skipped } = parseLeadsCsv(input.csv);
+
+  // Treść formularza kampanii - dowód zgody na kontakt. Czytamy RAZ przed
+  // pętlą: przy stu osiemdziesięciu leadach zapytanie w środku pętli to sto
+  // osiemdziesiąt podróży do bazy po ten sam napis.
+  const { leadConsentText } = await getClubSettings();
+  const trescZgody = buildLeadConsentText(leadConsentText);
 
   // Najpierw dublety wewnątrz pliku - inaczej ten sam numer wchodziłby dwa
   // razy, bo drugiego jeszcze nie ma w bazie w chwili sprawdzania.
@@ -119,6 +128,30 @@ export async function importLeadsFromCsv(input: {
         actorUserId: input.actorUserId,
         kind: "IMPORTED",
         summary: `Zaimportowano z: ${LEAD_SOURCE_LABEL[l.source]}${l.campaign ? ` · ${l.campaign}` : ""}`,
+      });
+
+      // Zgoda na SMS powstaje RAZEM z leadem, nie później.
+      //
+      // To nie jest domniemanie: lead z kampanii klubu sam zostawił numer
+      // w formularzu Czapla Boxing, odpowiadając na pytania o dojazd, cenę
+      // pierwszego treningu i powód, dla którego chce trenować - czyli prosząc
+      // o kontakt w sprawie oferty. Kupionych ani zewnętrznych adresów tu nie
+      // ma i być nie może: import przyjmuje wyłącznie eksport z Ads Managera
+      // kampanii klubu.
+      //
+      // `grantedAt` to czas importu, a nie zgłoszenia - eksport z Ads Managera
+      // NIE MA kolumny z czasem zgłoszenia (ani z kolumną zgody), więc to
+      // najwcześniejszy moment, który klub jest w stanie wykazać. Zapisujemy
+      // to, co wiemy, zamiast wpisywać datę, której plik nie niesie.
+      await recordContactConsent(tx, {
+        leadId: lead.id,
+        channel: "SMS",
+        granted: true,
+        grantedAt: lead.importedAt,
+        source: "META_LEAD_ADS",
+        textSnapshot: trescZgody,
+        recordedByUserId: input.actorUserId,
+        note: l.campaign ? `Kampania: ${l.campaign}` : null,
       });
     });
     // Numer dopisujemy do zbioru od razu: dwa wiersze bez numeru, ale z tym

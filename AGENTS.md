@@ -865,6 +865,130 @@ zaden kanal nie zadziala, a w probie SMTP jest wylaczony. Dlatego zadanie
 raportuje `due` osobno od `athletesNotified` - roznica miedzy nimi jest na
 produkcji jedynym sygnalem, ze poczta padla.
 
+## Wiadomości SMS
+
+Bramką jest **SMSAPI.pl**, a cała rozmowa z nią to jeden POST na `sms.do`
+(`sendSmsDetailed` w `lib/services/notify.ts`). Świadomie bez pakietu npm od
+dostawcy - z tego samego powodu, dla którego poczta idzie przez SMTP, a nie
+przez API konkretnej firmy: zależność w `package.json` kosztowałaby build
+i powierzchnię ataku, a zmiana dostawcy to i tak podmiana tej jednej funkcji.
+
+Konfiguracja siedzi w dwóch zmiennych (`SMSAPI_TOKEN`, `SMSAPI_SENDER`), a jej
+stan widać na ekranie **Ustawienia → Wiadomości SMS**. Bez tokenu system **nie
+udaje wysyłki** - każda próba trafia do historii kontaktu jako „nie wysłano”.
+
+### Nazwa nadawcy ma jedenaście znaków
+
+Operatorzy przyjmują najwyżej 11 znaków bez polskich liter. **„CzaplaBoxing"
+ma dwanaście i się nie mieści** - stąd `CzaplaBox`. Sprawdza to
+`validateSmsSender`, i to przy ODCZYCIE konfiguracji, a nie dopiero przy
+wysyłce: zła nazwa nie jest awarią do wykrycia w locie, bo operator odrzuci
+wtedy każdą wiadomość, a klub zobaczy tylko „nie wysłano".
+
+### Ogonki podwajają rachunek
+
+Operator rozlicza **segmenty**, nie wiadomości. Wiadomość w alfabecie GSM mieści
+160 znaków w segmencie; wystarczy jedno „ż", żeby całość przeszła na UCS-2
+i próg spadł do 70. Powitanie leada ma 135 znaków, czyli z ogonkami idzie jako
+**trzy** segmenty, a bez nich jako **jeden** - przy 300 wiadomościach
+miesięcznie to 51 zł kontra 153 zł netto.
+
+Dlatego `toGsmAlphabet` (`lib/domain/sms.ts`) zdejmuje ogonki **u nas**, choć
+SMSAPI ma własny parametr `normalize`. Powód jest jeden: w historii kontaktu ma
+być zapisane DOKŁADNIE to, co poszło na telefon. Gdyby ogonki ścinał dostawca,
+klub czytałby w systemie treść z ogonkami, a klient dostałby inną - i nikt by
+tego nie zauważył aż do reklamacji. `normalize=1` wysyłamy mimo to, ale jako
+zabezpieczenie przed znakiem, którego nasza tablica nie zna.
+
+Tablica zamienników łapie też znaki, które wchodzą do treści niezauważone:
+cudzysłowy typograficzne z Worda, półpauzę, wielokropek jednym znakiem, twardą
+spację. Każdy z nich w milczeniu przełącza wiadomość na UCS-2. Litery, które
+w alfabecie GSM **są** (é, ü, à), zostawiamy - kaleczenie ich byłoby psuciem
+treści bez powodu.
+
+### Zgoda dotyczy KANAŁU, nie klienta
+
+`ContactConsent` - osobny model od `Consent`, bo tamten wisi na kartotece
+(`memberId`, wymagane), a zgodę na SMS daje najczęściej lead, który kartoteki
+jeszcze nie ma i może nigdy nie mieć.
+
+Wpisy są **nienaruszalne**, jak `Payment`. Cofnięcie zgody to nowy wiersz
+z `granted: false`, nie edycja starego - trzeba udowodnić stan z konkretnego
+dnia („czy wolno było wysłać SMS-a trzeciego marca"), a nie stan dzisiejszy.
+Rozstrzyga **najpóźniejsze** oświadczenie (`consentInForce`); bez tego jedno
+„tak" sprzed roku przebijałoby wczorajsze „proszę przestać".
+
+**Lead z kampanii ma zgodę od chwili importu.** To nie domniemanie: importer
+przyjmuje wyłącznie eksport z Ads Managera kampanii klubu, a człowiek sam
+zostawił tam numer, odpowiadając na pytania o dojazd, cenę pierwszego treningu
+i powód, dla którego chce trenować. Kupionych ani zewnętrznych adresów tą drogą
+nie ma jak wprowadzić.
+
+`grantedAt` to czas **importu**, nie zgłoszenia - eksport z Ads Managera nie ma
+ani kolumny zgody, ani czasu zgłoszenia (plik klubu ma pięć kolumn: imię,
+numer i trzy pytania kwalifikujące). Zapisujemy najwcześniejszy moment, który
+klub jest w stanie wykazać, zamiast wpisywać datę, której plik nie niesie.
+
+Dowodem pozostaje treść samego formularza, więc klub wkleja ją **raz**
+w Ustawieniach → Wiadomości SMS, a system zapisuje ją dosłownie przy każdym
+imporcie (`textSnapshot`). Kopia, nie odsyłacz: klauzula na stronie się zmieni,
+a udowodnić trzeba to, co człowiek wtedy przeczytał.
+
+Zgoda **idzie za człowiekiem** na kartotekę przy konwersji leada na klienta
+(`attachLeadConsentsToMember`) - dopinamy `memberId` do istniejących wierszy,
+a nie kopiujemy ich z nową datą. Kopia cofałaby dowód do dnia konwersji.
+
+### Kiedy zgoda jest w ogóle potrzebna
+
+Granicę wyznacza jedno pytanie: **czy ta wiadomość zmierza do tego, żeby
+odbiorca coś kupił?**
+
+| rodzaj wiadomości | zgoda |
+| --- | --- |
+| odwołane zajęcia, zmiana sali, potwierdzenie zapisu i wpłaty, zaległa płatność, kończące się badania, sprawy dziecka do rodzica, reset hasła | **nie** - to nie jest informacja handlowa |
+| powitanie po rozmowie, oferta, promocja, zaproszenie na trening | **tak** |
+
+Dlatego SMS jako **zapas po nieudanym pushu i mailu** (`notify`
+w `lib/services/notification.ts`) nie pyta o żadną zgodę - tam nie ma czego
+sprzedawać. Pyta natomiast powitanie leada (`saveCallSummaryAction`).
+
+Blokada stoi **przed zapisem** podsumowania, tak samo jak sprawdzenie braku
+numeru: komunikat „brak zgody" po fakcie byłby bez wartości, bo notatka już by
+się zapisała, a powitanie i tak by nie poszło.
+
+Wybór w formularzu rozmowy ma **trzy stany**, a nie checkbox: „nie zaznaczone"
+musi znaczyć „nie pytałem", a nie „odmówił" - inaczej każda rozmowa bez tego
+kliknięcia zamykałaby kanał. Odmowa jest tak samo warta zapisania jak zgoda,
+bo chroni przed wysłaniem czegoś, czego ktoś sobie nie życzy.
+
+### Leady wgrane, zanim to działało
+
+```
+npx tsx prisma/zgody-leadow.ts --env .env.vercel            # podgląd
+npx tsx prisma/zgody-leadow.ts --env .env.vercel --ustaw    # wykonanie
+```
+
+Dopisuje zgodę leadom bez wpisu, z datą ich `importedAt`. **Nie rusza** tych,
+które wpis już mają - także odmów. Treść formularza kampanii trzeba uzupełnić
+w ustawieniach PRZED uruchomieniem: wpisy są nienaruszalne, więc poprawianie
+ich po fakcie przeczyłoby całej konstrukcji.
+
+### Sprawdzenie
+
+```
+$env:NODE_OPTIONS = "--conditions=react-server"
+npx.cmd tsx prisma/proba-sms.ts
+```
+
+Wgrywa leada z syntetycznego pliku, sprawdza zgodę z importu, wycofuje ją,
+udziela ponownie i przenosi na kartotekę - pilnując przy tym, że stare wpisy
+nie znikają. Tylko baza deweloperska.
+
+Samej wysyłki ta próba nie sprawdza (wymaga tokenu i kosztuje za sztukę). Do
+tego jest przycisk **„Próba (bez wysyłki)"** na ekranie ustawień: przepuszcza
+wiadomość przez pełną kontrolę bramki - token, nazwę nadawcy, numer - i nic nie
+wysyła.
+
 ## Dane kontaktowe konta
 
 **E-mail i telefon sa WYMAGANE przy rejestracji.** Numer siedzi na `User.phone`

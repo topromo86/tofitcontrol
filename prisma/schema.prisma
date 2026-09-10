@@ -74,23 +74,24 @@ model User {
   emailVerificationTokens EmailVerificationToken[]
   guardianLinkRequests    GuardianLinkRequest[]    @relation("GuardianLinkRequester")
 
-  trainer               Trainer?       @relation("TrainerAccount")
-  memberAccount         Member?        @relation("MemberAccount")
-  guardianOfMembers     Member[]       @relation("MemberGuardian")
-  authoredNotes         Note[]         @relation("NoteAuthor")
-  recordedAttendances   Attendance[]   @relation("AttendanceRecordedBy")
-  soldPasses            Pass[]         @relation("PassSoldBy")
-  recordedPayments      Payment[]      @relation("PaymentRecordedBy")
-  closedCashDays        CashDay[]      @relation("CashDayClosedBy")
-  grantedConsents       Consent[]      @relation("ConsentGrantedBy")
-  activityLogs          ActivityLog[]  @relation("ActivityActor")
-  recordedMeasurements  Measurement[]  @relation("MeasurementRecordedBy")
-  refundedEntries       Booking[]      @relation("BookingEntryRefundedBy")
-  assignedLeads         Lead[]         @relation("LeadAssignee")
-  leadNotes             LeadNote[]     @relation("LeadNoteAuthor")
-  leadActivities        LeadActivity[] @relation("LeadActivityActor")
-  floorCheckIns         FloorCheckIn[] @relation("FloorCheckInUser")
-  recordedFloorCheckIns FloorCheckIn[] @relation("FloorCheckInRecorder")
+  trainer                 Trainer?         @relation("TrainerAccount")
+  memberAccount           Member?          @relation("MemberAccount")
+  guardianOfMembers       Member[]         @relation("MemberGuardian")
+  authoredNotes           Note[]           @relation("NoteAuthor")
+  recordedAttendances     Attendance[]     @relation("AttendanceRecordedBy")
+  soldPasses              Pass[]           @relation("PassSoldBy")
+  recordedPayments        Payment[]        @relation("PaymentRecordedBy")
+  closedCashDays          CashDay[]        @relation("CashDayClosedBy")
+  grantedConsents         Consent[]        @relation("ConsentGrantedBy")
+  recordedContactConsents ContactConsent[] @relation("ContactConsentRecordedBy")
+  activityLogs            ActivityLog[]    @relation("ActivityActor")
+  recordedMeasurements    Measurement[]    @relation("MeasurementRecordedBy")
+  refundedEntries         Booking[]        @relation("BookingEntryRefundedBy")
+  assignedLeads           Lead[]           @relation("LeadAssignee")
+  leadNotes               LeadNote[]       @relation("LeadNoteAuthor")
+  leadActivities          LeadActivity[]   @relation("LeadActivityActor")
+  floorCheckIns           FloorCheckIn[]   @relation("FloorCheckInUser")
+  recordedFloorCheckIns   FloorCheckIn[]   @relation("FloorCheckInRecorder")
 
   @@index([role])
 }
@@ -260,11 +261,11 @@ model Member {
 
   // Zawodnik startujacy w zawodach. Flage nadaje wlasciciel; termin badan
   // wpisuje kadra. Data, nie moment - badania sa wazne "do dnia".
-  isCompetitor            Boolean   @default(false)
-  medicalExamValidUntil   DateTime? @db.Date
+  isCompetitor          Boolean   @default(false)
+  medicalExamValidUntil DateTime? @db.Date
   // Kartoteka z danych demonstracyjnych. Widać to na liście klubowiczów, żeby
   // nikt nie wziął demonstracyjnego Kowalskiego za klienta klubu.
-  isDemo                     Boolean        @default(false)
+  isDemo                Boolean   @default(false)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -292,6 +293,7 @@ model Member {
   absenceReports       AbsenceReport[]
   guardianLinkRequests GuardianLinkRequest[] @relation("GuardianLinkMember")
   convertedLead        Lead?                 @relation("LeadMember")
+  contactConsents      ContactConsent[]
 
   @@index([ownerTrainerId, status])
   @@index([approvalStatus])
@@ -415,6 +417,18 @@ model ClubSettings {
   // Do ilu minut przed startem trener ma odbić kod. Po tym czasie odbicie
   // liczy się jako spóźnione i trafia do właściciela na pulpit.
   trainerCheckInMinutesBefore Int @default(5)
+
+  // Pelna identyfikacja administratora danych (nazwa podmiotu, forma prawna,
+  // NIP, adres). Wchodzi DOSLOWNIE do tresci klauzuli zgody na SMS - klauzula
+  // bez wskazania, kto jest administratorem, jest niekonkretna, a wiec wadliwa.
+  // Puste znaczy "klub jeszcze tego nie uzupelnil" i ekran ustawien o tym mowi.
+  dataController String?
+
+  // Tresc zgody/pytania z formularza kampanii Meta - to na jej podstawie lead
+  // godzi sie na kontakt i przeslanie oferty. Wchodzi doslownie do zapisu
+  // zgody przy imporcie, zeby dowodem byla wypowiedz z formularza, a nie nasz
+  // opis tego, co formularz zapewne zawieral.
+  leadConsentText String?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -581,9 +595,9 @@ model Session {
   // wyjaśnioną. Sam alert znika wtedy z pulpitu, ale ślad zostaje: bez tego
   // "zajęcia bez trenera" dałoby się wyciszyć bez śladu, a to jest pytanie
   // o to, kto realnie pracował.
-  trainerCheckInWaivedAt     DateTime? @db.Timestamptz
+  trainerCheckInWaivedAt       DateTime? @db.Timestamptz
   trainerCheckInWaivedByUserId String?
-  trainerCheckInWaivedNote   String?   @db.Text
+  trainerCheckInWaivedNote     String?   @db.Text
 
   // Potwierdzenie obecności przez prowadzącego: liczba osób, którą zatwierdził,
   // i moment zatwierdzenia. Dopóki tego nie ma, lista obecności jest wstępna.
@@ -973,6 +987,67 @@ model Consent {
 }
 
 // ---------------------------------------------------------------------------
+// Zgody na kanal kontaktu (SMS, e-mail, telefon)
+// ---------------------------------------------------------------------------
+//
+// Osobno od modelu `Consent`, a nie w nim, bo tamten wisi na KARTOTECE
+// (`memberId`, wymagane) - a zgode na SMS daje najczesciej lead, ktory
+// kartoteki jeszcze nie ma i moze nigdy nie miec. Poza tym `Consent` opisuje
+// zgody regulaminowe klubu (RODO, wizerunek, opiekun), ktore maja wersje
+// i tresc w `ConsentType`; tutaj chodzi o co innego: o dowod, ze konkretny
+// czlowiek zgodzil sie na konkretny KANAL.
+//
+// Wpisy sa nienaruszalne (append-only, jak `Payment`). Cofniecie zgody to nowy
+// wiersz z `granted: false`, nie edycja starego - trzeba udowodnic stan
+// z konkretnego dnia, a nie stan dzisiejszy.
+
+enum ContactChannel {
+  SMS
+  EMAIL
+  PHONE_CALL
+}
+
+enum ContactConsentSource {
+  META_LEAD_ADS
+  ROZMOWA_TELEFONICZNA
+  FORMULARZ_WWW
+  PANEL_KLUBU
+}
+
+model ContactConsent {
+  id       String  @id @default(cuid())
+  leadId   String?
+  memberId String?
+
+  channel ContactChannel
+  granted Boolean
+
+  // MOMENT OSWIADCZENIA, nie moment wpisania do systemu. To jest pole, ktore
+  // dowodzi "uprzedniosci" z art. 398 PKE - zgoda musi byc wczesniejsza niz
+  // pierwsza wiadomosc.
+  grantedAt        DateTime             @db.Timestamptz
+  // Kiedy wpis powstal w bazie. Rozne od `grantedAt`, gdy klub wpisuje zgode
+  // z rozmowy sprzed godziny - i wlasnie ta roznica jest tu informacja.
+  recordedAt       DateTime             @default(now()) @db.Timestamptz
+  recordedByUserId String?
+  source           ContactConsentSource
+
+  // DOSLOWNA tresc klauzuli w chwili wyrazenia zgody, nie odsylacz do wersji.
+  // Klauzula na stronie sie zmieni, a udowodnic trzeba to, co czlowiek wtedy
+  // uslyszal albo przeczytal.
+  textSnapshot String  @db.Text
+  textVersion  String
+  note         String?
+
+  lead       Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  member     Member? @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  recordedBy User?   @relation("ContactConsentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, channel])
+  @@index([memberId, channel])
+}
+
+// ---------------------------------------------------------------------------
 // Reszta
 // ---------------------------------------------------------------------------
 
@@ -1322,6 +1397,7 @@ model Lead {
 
   notes      LeadNote[]
   activities LeadActivity[]
+  consents   ContactConsent[]
 
   @@unique([source, externalId])
   @@index([status])

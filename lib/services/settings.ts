@@ -18,6 +18,13 @@ export type ClubSettingsView = {
   fontTheme: FontThemeId;
   qrOpensMinutesBefore: number;
   trainerCheckInMinutesBefore: number;
+  // Pełna identyfikacja administratora danych do klauzul zgody. Null, dopóki
+  // klub tego nie uzupełni - i wtedy ekran ustawień mówi o tym wprost, zamiast
+  // podstawiać wymyśloną nazwę podmiotu do dokumentu, który ma coś dowodzić.
+  dataController: string | null;
+  // Treść formularza kampanii Meta, na podstawie której lead godzi się na
+  // kontakt. Wchodzi dosłownie do zapisu zgody przy imporcie.
+  leadConsentText: string | null;
 };
 
 // Ustawienia klubu z bezpiecznym domyślnym stanem. Wiersz "singleton" jest
@@ -38,5 +45,7 @@ export async function getClubSettings(): Promise<ClubSettingsView> {
     qrOpensMinutesBefore: settings?.qrOpensMinutesBefore ?? DEFAULT_QR_OPENS_MINUTES_BEFORE,
     trainerCheckInMinutesBefore:
       settings?.trainerCheckInMinutesBefore ?? DEFAULT_TRAINER_CHECK_IN_MINUTES_BEFORE,
+    dataController: settings?.dataController?.trim() || null,
+    leadConsentText: settings?.leadConsentText?.trim() || null,
   };
 }

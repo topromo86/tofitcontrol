@@ -19,7 +19,14 @@ import { calculateAge } from "@/lib/domain/booking";
 import { isValidEmail, normalizeEmail } from "@/lib/domain/registration";
 import { importLeadsFromCsv, logLeadActivity } from "@/lib/services/lead";
 import { logActivity } from "@/lib/services/activity";
-import { sendEmail, sendSms } from "@/lib/services/notify";
+import { sendEmail, sendSmsDetailed } from "@/lib/services/notify";
+import { buildSmsConsentText, consentInForce } from "@/lib/domain/contact-consent";
+import {
+  attachLeadConsentsToMember,
+  recordContactConsent,
+  smsConsentHistory,
+} from "@/lib/services/contact-consent";
+import { getClubSettings } from "@/lib/services/settings";
 import type { LeadStatus, Sex } from "@/app/generated/prisma/client";
 
 // Import CSV: plik z inputa albo wklejony tekst. Po imporcie wracamy na listę
@@ -204,6 +211,11 @@ export async function convertLeadToMemberAction(formData: FormData) {
       data: { convertedMemberId: member.id, status: "CONVERTED" as LeadStatus },
     });
 
+    // Zgoda na SMS idzie za człowiekiem na kartotekę. Bez tego klubowicz
+    // przestawałby mieć zgodę dokładnie w chwili, w której przestaje być
+    // leadem, a klub musiałby pytać o nią drugi raz.
+    await attachLeadConsentsToMember(tx, { leadId, memberId: member.id });
+
     await logLeadActivity(tx, {
       leadId,
       actorUserId: session.user.id,
@@ -236,6 +248,10 @@ export async function saveCallSummaryAction(formData: FormData) {
   const phoneRaw = String(formData.get("phone") ?? "").trim();
   const emailRaw = String(formData.get("email") ?? "").trim();
   const channel = parseWelcomeChannel(String(formData.get("welcomeChannel") ?? ""));
+  // Zgoda na SMS: rozmowa jest jedynym momentem, w którym klub może ją
+  // potwierdzić albo usłyszeć "proszę nie wysyłać". "BEZ_ZMIAN" zostawia stan
+  // sprzed rozmowy - najczęściej zgodę z formularza kampanii.
+  const zgodaSms = String(formData.get("zgodaSms") ?? "BEZ_ZMIAN");
 
   function fail(message: string): never {
     redirect(`/leady/${leadId}?blad=${encodeURIComponent(message)}`);
@@ -247,6 +263,7 @@ export async function saveCallSummaryAction(formData: FormData) {
     where: { id: leadId },
     select: { fullName: true, phone: true, email: true },
   });
+  const { dataController } = await getClubSettings();
 
   // Dane kontaktowe: z formularza (jeśli uzupełniono), inaczej te z leada.
   const phone = phoneRaw ? parseLeadPhone(phoneRaw) : lead.phone;
@@ -257,6 +274,31 @@ export async function saveCallSummaryAction(formData: FormData) {
   // wartości, bo podsumowanie już by się zapisało, a powitanie nie poszło.
   const missing = missingWelcomeContact(channel, { phone, email });
   if (missing) fail(missing);
+
+  // Zgoda na kanał SMS - stan po TEJ rozmowie, nie sprzed niej. Wybór
+  // z formularza wygrywa, bo odzwierciedla to, co rozmówca właśnie powiedział;
+  // "Bez zmian" zostawia stan z bazy, czyli zwykle zgodę z formularza kampanii.
+  const wolnoSms =
+    zgodaSms === "UDZIELONA"
+      ? true
+      : zgodaSms === "WYCOFANA"
+        ? false
+        : consentInForce(await smsConsentHistory({ leadId }));
+
+  // Odmowa zamyka kanał i nie ma od tego wyjątku - człowiek, który powiedział
+  // "proszę nie wysyłać", ma tego nie dostać, choćby ktoś zaznaczył powitanie
+  // z rozpędu.
+  //
+  // Ale sprzeczne ustawienie NIE unieważnia całego formularza. Odrzucenie
+  // zapisu kasowałoby to, co w tym formularzu najcenniejsze: treść rozmowy
+  // i samą odmowę. Zapisujemy więc wszystko, pomijamy jedynie wysyłkę i mówimy
+  // o tym wprost - ta sama zasada, co przy nieudanej bramce niżej.
+  const pomijamySms = (channel === "SMS" || channel === "BOTH") && !wolnoSms;
+  const powodPominiecia = !pomijamySms
+    ? null
+    : zgodaSms === "WYCOFANA"
+      ? "Rozmówca prosi o zaprzestanie - SMS powitalny nie został wysłany. Podsumowanie i odmowa są zapisane."
+      : "Ten kontakt nie ma zgody na SMS - powitanie nie zostało wysłane. Podsumowanie jest zapisane; zapytaj o zgodę w rozmowie i zaznacz „Potwierdził w rozmowie”.";
 
   await prisma.$transaction(async (tx) => {
     if ((phone && phone !== lead.phone) || (email && email !== lead.email)) {
@@ -271,6 +313,31 @@ export async function saveCallSummaryAction(formData: FormData) {
       kind: "SUMMARY",
       summary: "Zapisano podsumowanie rozmowy",
     });
+
+    if (zgodaSms === "UDZIELONA" || zgodaSms === "WYCOFANA") {
+      const udzielona = zgodaSms === "UDZIELONA";
+      await recordContactConsent(tx, {
+        leadId,
+        channel: "SMS",
+        granted: udzielona,
+        // Moment oświadczenia to rozmowa, która właśnie się skończyła.
+        grantedAt: new Date(),
+        source: "ROZMOWA_TELEFONICZNA",
+        textSnapshot: buildSmsConsentText(dataController ?? "Czapla Boxing"),
+        recordedByUserId: session.user.id,
+        note: udzielona
+          ? "Zgoda potwierdzona w rozmowie telefonicznej."
+          : "Rozmówca poprosił o zaprzestanie wysyłania SMS-ów.",
+      });
+      await logLeadActivity(tx, {
+        leadId,
+        actorUserId: session.user.id,
+        kind: "NOTE_ADDED",
+        summary: udzielona
+          ? "Zgoda na SMS potwierdzona w rozmowie"
+          : "Zgoda na SMS wycofana - rozmówca nie chce wiadomości",
+      });
+    }
   });
 
   // Powitanie idzie PO zapisaniu podsumowania: gdyby bramka SMS albo poczta
@@ -278,16 +345,30 @@ export async function saveCallSummaryAction(formData: FormData) {
   // treść rozmowy przez awarię cudzej usługi.
   const { firstName } = splitFullName(lead.fullName);
 
-  if ((channel === "SMS" || channel === "BOTH") && phone) {
-    const sent = await sendSms(phone, buildWelcomeSms(firstName));
+  if (pomijamySms) {
     await prisma.$transaction(async (tx) => {
       await logLeadActivity(tx, {
         leadId,
         actorUserId: session.user.id,
         kind: "WELCOME_SMS",
-        summary: sent
-          ? `Wysłano SMS powitalny na ${phone}`
-          : `SMS powitalny na ${phone} - bramka SMS nieaktywna, nie wysłano`,
+        summary: `SMS powitalny - NIE wysłano, brak zgody na kanał SMS`,
+      });
+    });
+  }
+
+  if ((channel === "SMS" || channel === "BOTH") && phone && !pomijamySms) {
+    const wynik = await sendSmsDetailed(phone, buildWelcomeSms(firstName));
+    await prisma.$transaction(async (tx) => {
+      await logLeadActivity(tx, {
+        leadId,
+        actorUserId: session.user.id,
+        kind: "WELCOME_SMS",
+        // Liczba segmentów w historii nie jest ciekawostką: to mnożnik ceny,
+        // a przy wysyłce do stu osiemdziesięciu osób różnica między jednym
+        // a dwoma segmentami to podwojony rachunek za całą kampanię.
+        summary: wynik.ok
+          ? `Wysłano SMS powitalny na ${phone} (${wynik.segments} segm.)`
+          : `SMS powitalny na ${phone} - nie wysłano: ${wynik.error}`,
       });
     });
   }
@@ -308,7 +389,11 @@ export async function saveCallSummaryAction(formData: FormData) {
   }
 
   revalidatePath(`/leady/${leadId}`);
-  redirect(`/leady/${leadId}`);
+  redirect(
+    powodPominiecia
+      ? `/leady/${leadId}?blad=${encodeURIComponent(powodPominiecia)}`
+      : `/leady/${leadId}`,
+  );
 }
 
 export async function addLeadNoteAction(formData: FormData) {

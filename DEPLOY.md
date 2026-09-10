@@ -75,7 +75,7 @@ Opcjonalne (funkcje działają dopiero po ich ustawieniu):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | potwierdzenia zapisu i przypomnienia mailem |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | powiadomienia push (klucze są już w Twoim lokalnym `.env`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | logowanie przez Google |
-| `SMS_PROVIDER_API_KEY` | SMS (dostawca nie jest jeszcze podpięty) |
+| `SMSAPI_TOKEN`, `SMSAPI_SENDER` | wiadomości SMS przez SMSAPI.pl (nadawca max 11 znaków, bez ogonków) |
 
 `DATABASE_URL` musi być ustawiony **przed pierwszym buildem** — część stron
 odpytuje bazę już na etapie budowania.
