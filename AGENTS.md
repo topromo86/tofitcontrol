@@ -601,6 +601,35 @@ WSZYSTKICH leadow jednym zapytaniem po dwoch kolumnach i buduje zbior
 tozsamosci w pamieci. Przy skali klubu (setki wierszy) kosztuje to mniej niz
 jedna podroz do bazy na wiersz pliku.
 
+### Import DOPISUJE, nigdy nie nadpisuje
+
+Nowy plik to **doimportowanie do biezacych**, a nie podmiana bazy. Istniejacego
+leada nie ruszamy ani o pole: klub mogl juz zmienic status, umowic termin,
+dopisac notatke albo przypisac opiekuna - swiezy wiersz z pliku cofnalby to
+wszystko do stanu "Nowy". `importLeadsFromCsv` robi wylacznie `create`, i to
+tylko dla wierszy, ktorych w bazie nie ma.
+
+### Obie drogi wejscia maja TE SAMA regule
+
+Leady wchodza dwiema drogami i kazda z nich musi pytac o to samo:
+
+| droga | co sprawdza |
+| --- | --- |
+| plik CSV (`importLeadsFromCsv`) | dublety w pliku -> `externalId` -> **numer** |
+| webhook z Meta (`importLeadgenEntries`) | `(source, externalId)` -> **numer** |
+
+Sprawdzenie numeru siedzi w jednym miejscu - `existingLeadIdentities`
+(`lib/services/lead.ts`). Wczesniej kazda droga miala wlasna regule: plik
+patrzyl na numer, a webhook **wylacznie na `externalId`**, czyli lapal tylko to,
+ze Meta ponowila to samo wywolanie. Czlowiek, ktory wypelnil formularz drugi raz
+(inny `leadgen_id`) albo byl juz w bazie z pliku, wchodzil przez webhook
+jeszcze raz.
+
+W webhooku sita sa dwa i kolejnosc nie jest przypadkowa: `externalId` idzie
+pierwszy, bo nie kosztuje zapytania do Mety po szczegoly zgloszenia. Nowo
+zalozone tozsamosci dopisujemy do zbioru od razu - inaczej dwa zgloszenia tej
+samej osoby w JEDNEJ paczce weszlyby oba.
+
 ### Sprzatanie duplikatow, ktore juz weszly
 
 ```
@@ -672,7 +701,16 @@ npx.cmd tsx prisma/proba-importu-leadow.ts
 ```
 
 Wgrywa syntetyczny plik odtwarzajacy wszystkie dziwactwa realnego eksportu,
-wgrywa go drugi raz (ma nie zalozyc nic) i odzyskuje imie ze zepsutego wpisu.
+wgrywa go drugi raz (ma nie zalozyc nic), doimportowuje DRUGI plik z czescia
+tych samych osob zapisanych inaczej plus nowymi, i odzyskuje imie ze zepsutego
+wpisu.
+
+Najwazniejszy jest krok 5d, bez ktorego cala reszta przechodzi takze na
+zepsutym kodzie: numery z PLIKU parser i tak sprowadza do `+48...`, wiec
+porownywanie napisow trafia, dopoki baza jest czysta. Dopiero wiersz zapisany
+w bazie STARYM parserem (`48777666555` bez plusa) pokazuje blad - i to on
+zrobil 923 leady ze 183 osob. Krok 5b sprawdza osobno, ze praca klubu (status,
+termin, notatka) przezyla doimportowanie.
 Plik testowy jest w skrypcie - prawdziwego eksportu nie ma w repozytorium
 i byc nie moze, bo to dane osobowe 185 osob.
 

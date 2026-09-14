@@ -9,8 +9,8 @@ import {
   type MetaFieldEntry,
   type MetaLeadgenEntry,
 } from "@/lib/domain/meta-leads";
-import { parseLeadPhone } from "@/lib/domain/lead-import";
-import { logLeadActivity } from "@/lib/services/lead";
+import { leadIdentity, parseLeadPhone } from "@/lib/domain/lead-import";
+import { existingLeadIdentities, logLeadActivity } from "@/lib/services/lead";
 
 // Automatyczny import leadów z Meta zamiast wklejania CSV.
 //
@@ -108,13 +108,27 @@ async function fetchLeadDetails(leadgenId: string): Promise<GraphLead | null> {
 
 export type MetaImportResult = { created: number; duplicates: number; incomplete: number };
 
-// Zapisuje zgłoszenia z webhooka. Dedup po (source, externalId) - Meta potrafi
-// ponowić to samo wywołanie, gdy nie odpowiemy dość szybko, a podwójny lead
-// w kartotece znaczy dwa telefony do tej samej osoby.
+// Zapisuje zgłoszenia z webhooka.
+//
+// DWA sita, bo łapią dwie różne rzeczy:
+//
+//   1. `(source, externalId)` - Meta potrafi ponowić to samo wywołanie, gdy nie
+//      odpowiemy dość szybko. To sito jest pierwsze, bo nie kosztuje zapytania
+//      do Mety po szczegóły zgłoszenia,
+//   2. NUMER TELEFONU (`leadIdentity` -> `phoneKey`) - ten sam człowiek potrafi
+//      wypełnić formularz drugi raz (dostaje wtedy INNY `leadgen_id`) albo być
+//      już w bazie z pliku wgranego ręcznie. Pierwsze sito tego nie widzi.
+//
+// Bez drugiego sita webhook robił dokładnie to, co plik przed poprawką:
+// dokładał tę samą osobę jeszcze raz, a klub dzwonił pod ten numer dwa razy.
+//
+// Nowo założone tożsamości dopisujemy do zbioru od razu - inaczej dwa
+// zgłoszenia tej samej osoby w JEDNEJ paczce weszłyby oba.
 export async function importLeadgenEntries(
   entries: readonly MetaLeadgenEntry[],
 ): Promise<MetaImportResult> {
   const result: MetaImportResult = { created: 0, duplicates: 0, incomplete: 0 };
+  const wBazie = await existingLeadIdentities();
 
   for (const entry of entries) {
     const existing = await prisma.lead.findFirst({
@@ -129,6 +143,15 @@ export async function importLeadgenEntries(
     const details = await fetchLeadDetails(entry.leadgenId);
     const fields = details?.field_data ? extractLeadFields(details.field_data) : null;
     const complete = Boolean(fields?.fullName);
+
+    const phone = fields?.phone ? parseLeadPhone(fields.phone) : null;
+    const email = fields?.email ?? null;
+    const tozsamosc = leadIdentity({ phone, email });
+    if (tozsamosc && wBazie.has(tozsamosc)) {
+      result.duplicates++;
+      continue;
+    }
+
     if (!complete) result.incomplete++;
 
     const lead = await prisma.lead.create({
@@ -136,8 +159,8 @@ export async function importLeadgenEntries(
         source: "FACEBOOK",
         externalId: entry.leadgenId,
         fullName: fields?.fullName ?? placeholderName(entry.leadgenId),
-        email: fields?.email ?? null,
-        phone: fields?.phone ? parseLeadPhone(fields.phone) : null,
+        email,
+        phone,
         campaign: details?.campaign_name ?? details?.ad_name ?? null,
         // Surowa odpowiedź zostaje: gdy formularz w Meta ma nietypowe pola,
         // klub odczyta je z karty leada, zamiast szukać w Menedżerze reklam.
@@ -155,6 +178,7 @@ export async function importLeadgenEntries(
         : "Zgłoszenie z Meta - brak tokenu do pobrania danych, uzupełnij ręcznie",
     });
 
+    if (tozsamosc) wBazie.add(tozsamosc);
     result.created++;
   }
 

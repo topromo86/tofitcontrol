@@ -30,6 +30,28 @@ export async function logLeadActivity(
   });
 }
 
+// Tożsamości WSZYSTKICH leadów, które już są w bazie.
+//
+// Jedno miejsce dla obu dróg wejścia: importu pliku i webhooka z Meta. Zanim
+// powstało, każda z nich miała własną regułę - plik sprawdzał numer, a webhook
+// wyłącznie `externalId`, czyli łapał tylko ponowione wywołanie Mety. Człowiek,
+// który wypełnił formularz drugi raz albo był już w bazie z pliku, wchodził
+// przez webhook jeszcze raz.
+//
+// Tożsamość idzie po CIĄGU CYFR (`leadIdentity` -> `phoneKey`), a takiego
+// porównania nie da się wyrazić zapytaniem `where phone IN (...)`: w bazie ten
+// sam numer potrafi leżeć jako `605687770`, `48605687770` i `+48605687770`.
+// Dlatego bierzemy numery i adresy wszystkich leadów i budujemy zbiór
+// w pamięci.
+//
+// To jedno zapytanie po dwóch kolumnach - przy skali klubu (setki, nie miliony
+// wierszy) kosztuje mniej niż jedna podróż do bazy na każdy sprawdzany wiersz,
+// a jest jedynym porównaniem, które realnie łapie duplikat.
+export async function existingLeadIdentities(): Promise<Set<string>> {
+  const znane = await prisma.lead.findMany({ select: { phone: true, email: true } });
+  return new Set(znane.map((l) => leadIdentity(l)).filter((k): k is string => k !== null));
+}
+
 export type ImportResult = {
   created: number;
   duplicates: number;
@@ -72,17 +94,7 @@ export async function importLeadsFromCsv(input: {
   // razy, bo drugiego jeszcze nie ma w bazie w chwili sprawdzania.
   const { unique, duplicates: wPliku } = dedupeLeads(leads);
 
-  // Tożsamość idzie po CIĄGU CYFR (`leadIdentity` -> `phoneKey`), a takiego
-  // porównania nie da się wyrazić zapytaniem `where phone IN (...)`: w bazie
-  // ten sam numer potrafi leżeć jako `605687770`, `48605687770` i `+48605687770`.
-  // Dlatego bierzemy numery i adresy WSZYSTKICH leadów i budujemy zbiór
-  // tożsamości w pamięci.
-  //
-  // To jedno zapytanie po dwóch kolumnach - przy skali klubu (setki, nie
-  // miliony wierszy) kosztuje mniej niż jedna podróż do bazy na wiersz pliku,
-  // a jest jedynym porównaniem, które realnie łapie duplikat.
-  const znane = await prisma.lead.findMany({ select: { phone: true, email: true } });
-  const wBazie = new Set(znane.map((l) => leadIdentity(l)).filter((k): k is string => k !== null));
+  const wBazie = await existingLeadIdentities();
 
   const zewnetrzne = unique.map((l) => l.externalId).filter((id): id is string => Boolean(id));
   const znaneZewnetrzne = new Set(
