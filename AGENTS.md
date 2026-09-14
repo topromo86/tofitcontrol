@@ -755,6 +755,33 @@ wprost rozdziela oba jezyki.
 Kolumna "Ostatnio" jest zawsze wyciszona - **nigdy bursztynowa**. Druga rzecz
 w tej samej barwie odbiera jej znaczenie obu.
 
+### Przycisk akcji: "Sprzedaj" swieci, "Przedluz" nie
+
+Oba warianty mialy ten sam lancuch klas i roznil je wylacznie napis, wiec przy
+przewijaniu listy zlewaly sie w jeden szary klocek - oko musialo CZYTAC kazdy
+przycisk zamiast go rozpoznac.
+
+"Sprzedaj" niesie akcent (`brand-red`), bo stoi w wierszu czlowieka bez karnetu,
+czyli w jedynym, w ktorym klub ma cos do zrobienia. "Przedluz" zostaje
+wyciszony - przy pelnej kartotece to wiekszosc wierszy, a kolor majacy 80%
+ekranu przestaje byc sygnalem (ta sama zasada, przez ktora aktywny karnet nie
+swieci na zielono).
+
+Swiadomie `brand-red` (akcent AKCJI, ten sam co w odsylaczach calej aplikacji),
+a **nie** semantyczna czerwien `text-red`: tamta w tej liscie znaczy dokladnie
+jedno - "brak karnetu" - i niesie ja kropka oraz tekst statusu. Trzeci element
+w tej samej barwie odebralby kropce jej role. Z tego samego powodu "Przedluz"
+nie jest zielony.
+
+Roznica siedzi w BARWIE, nie w sile: "Przedluz" ma `text-text`. Wyciszenie go
+do `text-muted-brand` zbijalo kontrast w jasnym motywie do **4,24** - ponizej
+AA, a to jest przycisk, nie podpis. Czerwien klubu tez nie dziala w obu
+motywach tak samo: w ciemnym daje 4,95, w jasnym schodzi do **3,41**, wiec tam
+bierzemy ciemniejszy wariant `brand-red-dim` (zmierzone 5,8). Napis ma 12 px
+wersalikami - na taki rozmiar nie ma marginesu na "prawie wystarczy".
+
+Zmierzone po zmianie: ciemny 4,95 / 12,24, jasny 5,8 / 14,96.
+
 ### `pilnosc()` zamiast liczenia koloru w ekranie
 
 Kropka, ton tekstu i sam tekst statusu biora sie z jednej funkcji domenowej

@@ -502,7 +502,37 @@ export default async function AdminMembersPage({
                         reguły sprzedaży - do jedynego formularza, z ustawionym
                         klientem. Stylowany odsyłacz, nie przycisk w odsyłaczu.
                         "Przedłuż" i "Sprzedaj" mają po osiem znaków, więc
-                        krawędź stoi w każdym wierszu w tym samym miejscu. */}
+                        krawędź stoi w każdym wierszu w tym samym miejscu.
+
+                        DWA WARIANTY, DWA WYGLĄDY. Wcześniej oba miały ten sam
+                        łańcuch klas i różnił je wyłącznie napis - przy
+                        przewijaniu listy zlewały się w jeden szary klocek,
+                        więc oko musiało CZYTAĆ każdy przycisk, zamiast go
+                        rozpoznać.
+
+                        "Sprzedaj" niesie akcent (`brand-red`), bo stoi w wierszu
+                        człowieka bez karnetu - to jedyny wiersz, w którym klub
+                        ma coś do zrobienia. "Przedłuż" jest wyciszony: przy
+                        pełnej kartotece to zdecydowana większość wierszy,
+                        a kolor mający 80% ekranu przestaje być sygnałem.
+
+                        Świadomie `brand-red` (akcent akcji, ten sam co
+                        w odsyłaczach całej aplikacji), a NIE semantyczna
+                        czerwień `text-red`: tamta w tej liście znaczy dokładnie
+                        jedno - "brak karnetu" - i niesie ją kropka oraz tekst
+                        statusu. Trzeci element w tej samej barwie odebrałby
+                        kropce jej rolę. Z tego samego powodu "Przedłuż" nie
+                        jest zielony: jadeit znaczy tu "karnet aktywny", a ten
+                        fakt mówi już kolumna KARNET.
+
+                        Odróżnia je BARWA, a nie siła: "Przedłuż" zostaje przy
+                        `text-text`. Wyciszenie go do `text-muted-brand` zbijało
+                        kontrast w jasnym motywie do 4,24 - poniżej AA, a to
+                        jest przycisk, nie podpis. W ciemnym motywie czerwień
+                        klubu daje 4,95, ale w jasnym ta sama barwa schodzi do
+                        3,41, więc tam bierzemy ciemniejszy wariant
+                        (`brand-red-dim`, zmierzone 5,9). Napis ma 12 px
+                        wersalikami - na taki rozmiar nie ma marginesu. */}
                     <Link
                       href={
                         pass
@@ -510,7 +540,11 @@ export default async function AdminMembersPage({
                           : `/admin/wplaty?klient=${m.id}`
                       }
                       aria-label={`${pass ? "Przedłuż" : "Sprzedaj"} karnet: ${m.lastName} ${m.firstName}`}
-                      className="border-line bg-surface-2 text-text hover:text-brand-red flex h-11 shrink-0 items-center rounded-md border px-3 font-mono text-xs whitespace-nowrap uppercase lg:h-7"
+                      className={`flex h-11 shrink-0 items-center rounded-md border px-3 font-mono text-xs whitespace-nowrap uppercase lg:h-7 ${
+                        pass
+                          ? "border-line bg-surface-2 text-text hover:border-brand-red/50 hover:text-brand-red"
+                          : "border-brand-red/50 bg-brand-red/10 text-brand-red-dim hover:bg-brand-red/20 dark:text-brand-red"
+                      }`}
                     >
                       {pass ? "Przedłuż" : "Sprzedaj"}
                     </Link>
