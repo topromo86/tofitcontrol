@@ -122,6 +122,24 @@ npx tsx prisma/kiosk-account.ts --haslo <haslo>
 npx tsx prisma/kiosk-account.ts --env .env.vercel --haslo <haslo>
 ```
 
+Konto kiosku loguje sie **nazwa `kiosk`, nie adresem e-mail** - w kolumnie
+`User.email` lezy doslownie napis "kiosk". Dziala to od poczatku
+(`normalizeEmail` tylko przycina i zmniejsza litery, a `authorize` szuka konta
+po tej wartosci), ale EKRAN o tym nie mowil: pole nazywalo sie "E-mail",
+podpowiedz przegladarki brzmiala `autocomplete="email"`, a przy literowce
+w hasle system odpowiadal "Nieprawidlowy **e-mail** lub haslo". Czlowiek
+wpisujacy "kiosk" mial wiec trzy powody sadzic, ze system wymaga adresu -
+i szukal bledu tam, gdzie go nie bylo.
+
+Dlatego pole nazywa sie teraz **"E-mail lub login"**, niesie
+`autocomplete="username"` (token dla pola przyjmujacego JEDNO I DRUGIE - przy
+`email` menedzer hasel i klawiatura tabletu zachowuja sie tak, jakby adres byl
+wymagany), pod spodem stoi zdanie o tablecie, a komunikat bledu mowi
+"Nieprawidlowy **login** lub haslo".
+
+Komunikat zostaje CELOWO nierozrozniajacy, ktore z dwoch pol jest zle - inaczej
+bylby to sposob na sprawdzanie, ktore konta istnieja.
+
 Ekran odświeża się sam co 30 s (`<meta refresh>`, bez grama JS), więc kod
 przeskakuje na kolejne zajęcia bez dotykania tabletu. Kiedy kiosk miał jeszcze
 kamerę, to odświeżanie gasiło ją w połowie skanu i odczyt przepadał bez śladu -

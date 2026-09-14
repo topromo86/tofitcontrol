@@ -30,14 +30,18 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   const returnTo = formData.get("powrot");
 
   if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
-    return { error: "Podaj e-mail i hasło." };
+    return { error: "Podaj e-mail lub login oraz hasło." };
   }
 
   try {
     await signIn("credentials", { email, password, redirect: false });
   } catch (err) {
     if (err instanceof AuthError) {
-      return { error: "Nieprawidłowy e-mail lub hasło." };
+      // Nie "Nieprawidłowy e-mail lub hasło": kto loguje się nazwą "kiosk",
+      // czytał to jako "system wymaga adresu" i szukał błędu tam, gdzie go nie
+      // było. Komunikat zostaje CELOWO nierozróżniający, które z dwóch pól jest
+      // złe - inaczej byłby to sposób na sprawdzanie, które konta istnieją.
+      return { error: "Nieprawidłowy login lub hasło." };
     }
     throw err;
   }

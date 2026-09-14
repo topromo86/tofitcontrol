@@ -47,7 +47,7 @@ export function LoginForm({
           {returnTo ? <input type="hidden" name="powrot" value={returnTo} /> : null}
           <div className="flex flex-col gap-2">
             <Label htmlFor="email" className="font-mono text-xs tracking-widest uppercase">
-              E-mail
+              E-mail lub login
             </Label>
             <Input
               id="email"
@@ -55,10 +55,22 @@ export function LoginForm({
               // Nie type="email": konto kiosku loguje się nazwą "kiosk", a nie
               // adresem. Poprawność i tak sprawdza serwer, wyszukując konto.
               type="text"
-              autoComplete="email"
+              // `username`, a nie `email`: to pole przyjmuje JEDNO I DRUGIE.
+              // Przy `email` menedżer haseł i klawiatura tabletu zachowują się
+              // tak, jakby adres był wymagany - a na sali loguje się konto
+              // o nazwie "kiosk".
+              autoComplete="username"
               required
               className="border-line bg-surface-2"
             />
+            {/* Napis jest tu dla tabletu na sali. Pole nazywało się po prostu
+                "E-mail", więc człowiek wpisujący "kiosk" miał podstawy sądzić,
+                że system wymaga adresu - zwłaszcza że przy literówce w haśle
+                odpowiadał komunikatem "Nieprawidłowy e-mail lub hasło". */}
+            <p className="text-muted-brand text-xs">
+              Tablet na sali loguje się nazwą <span className="text-text font-mono">kiosk</span>,
+              bez adresu e-mail.
+            </p>
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="password" className="font-mono text-xs tracking-widest uppercase">
