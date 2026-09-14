@@ -4,7 +4,7 @@
 // zachowujemy w rawData, żeby nic nie zgubić.
 
 import type { LeadSource, LeadStatus } from "@/app/generated/prisma/client";
-import { parsePhoneOrNull } from "@/lib/domain/phone";
+import { parsePhoneOrNull, phoneKey } from "@/lib/domain/phone";
 
 export const LEAD_SOURCE_LABEL: Record<LeadSource, string> = {
   FACEBOOK: "Facebook",
@@ -278,7 +278,13 @@ export function leadFieldsFromRaw(raw: Record<string, unknown>): {
 // obu - nie udajemy, że wiemy: lead wchodzi, a ewentualną dublę wyłapie
 // człowiek na liście.
 export function leadIdentity(lead: { phone: string | null; email: string | null }): string | null {
-  if (lead.phone) return `tel:${lead.phone}`;
+  // Po CIĄGU CYFR (`phoneKey`), nie po zapisie numeru. Wcześniej było tu
+  // `tel:${lead.phone}`, czyli porównanie napisów - i lead zapisany starym
+  // parserem jako `48605687770` nie zrównywał się z `+48605687770` z nowego
+  // importu. Ten sam człowiek wchodził wtedy do klubu drugi raz; na produkcji
+  // urosło z tego 923 leady na 183 osoby.
+  const tel = phoneKey(lead.phone);
+  if (tel) return `tel:${tel}`;
   if (lead.email) return `mail:${lead.email.trim().toLowerCase()}`;
   return null;
 }

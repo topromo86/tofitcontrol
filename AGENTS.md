@@ -571,6 +571,61 @@ obowiazkowo i ktora nalezy do jednej osoby. E-mail jako zapas, gdy numeru brak.
 jednowyrazowe (`Karolina`), ozdobne (`𝕵𝖚𝖗𝖆𝖓𝖉`) albo sa nazwa firmy - dwie rozne
 osoby potrafia wygladac identycznie.
 
+### Tozsamosc numeru idzie po CYFRACH, nie po napisie
+
+`phoneKey` (`lib/domain/phone.ts`) sprowadza numer do samego ciagu cyfr,
+a `leadIdentity` porownuje wlasnie ten klucz:
+
+```
+605687770  ->  PL:605687770
+48605687770 -> PL:605687770
++48 605 687 770 -> PL:605687770
+0048605687770 -> PL:605687770
+31613737346 -> INT:31613737346   (zagraniczny zostaje osobno)
+```
+
+Numeru zagranicznego **nie scinamy** do dziewieciu cyfr - dwa kraje moga miec
+ta sama koncowke i zlepiliby sie w jedna osobe.
+
+Powod jest z produkcji, nie z teorii. Wczesniej tozsamoscia byl NAPIS
+(`tel:${lead.phone}`). Ten sam plik wgrano kilka razy, zanim parser sprowadzal
+numer do jednej postaci - i lead zapisany jako `48691041554` nie zrownal sie
+z `+48691041554` z poprawionego importu. **Na bazie klubu urosly z tego 923
+leady na 183 osoby**: kazdy czlowiek po piec razy, a 712 wierszy mialo w miejscu
+nazwiska wlasny numer. Kolejka "Do obdzwonienia" pokazywala te sama osobe piec
+razy.
+
+Deduplikacja **nie da sie juz wyrazic zapytaniem** `where phone IN (...)` - to
+znowu byloby porownanie napisow. `importLeadsFromCsv` bierze numery i adresy
+WSZYSTKICH leadow jednym zapytaniem po dwoch kolumnach i buduje zbior
+tozsamosci w pamieci. Przy skali klubu (setki wierszy) kosztuje to mniej niz
+jedna podroz do bazy na wiersz pliku.
+
+### Sprzatanie duplikatow, ktore juz weszly
+
+```
+npx tsx prisma/audyt-leadow.ts --env .env.vercel          # tylko czyta
+npx tsx prisma/scal-leady.ts  --env .env.vercel           # podglad
+npx tsx prisma/scal-leady.ts  --env .env.vercel --usun    # wykonanie
+```
+
+`scal-leady.ts` zostawia w grupie wiersz z kanonicznym numerem I prawdziwym
+imieniem, reszte kasuje. Ma trzy odmowy i kazda jest wazniejsza niz sprzatanie:
+grupa bez ani jednego dobrego wiersza, grupa z wiecej niz jednym (dwie osoby
+pod jednym telefonem - rodzic i dziecko) oraz wiersz do skasowania **niosacy
+prace klubu** (notatka, status inny niz "Nowy", termin, opiekun, zalozone
+konto). W kazdym z tych przypadkow cala grupa zostaje nietknieta.
+
+To nie jest ostroznosc na wyrost: kasowanie leada zabiera **kaskada** jego
+notatki, historie kontaktu i zgody na SMS.
+
+Uruchomione na produkcji 14.09.2026: 923 -> 183, zero grup pominietych. Kopia
+wszystkich 923 wierszy poszla przed operacja do `C:/dev/kopia-leadow-<data>.json`
+(poza repozytorium).
+
+**Kolejnosc ma znaczenie:** `zgody-leadow.ts` uruchamia sie PO scaleniu. Przed
+scaleniem zalozyloby zgody dla 923 wierszy, z czego 740 zaraz by znikneło.
+
 Istniejacego leada **nie nadpisujemy**. Klub mogl juz zmienic status, dopisac
 notatke albo umowic termin; swiezy wiersz z pliku cofnalby to do stanu "Nowy".
 

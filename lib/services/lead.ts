@@ -72,14 +72,16 @@ export async function importLeadsFromCsv(input: {
   // razy, bo drugiego jeszcze nie ma w bazie w chwili sprawdzania.
   const { unique, duplicates: wPliku } = dedupeLeads(leads);
 
-  // Jedno zapytanie zamiast jednego na wiersz: przy 185 leadach to różnica
-  // między jedną podróżą do bazy a stu osiemdziesięcioma.
-  const telefony = unique.map((l) => l.phone).filter((p): p is string => Boolean(p));
-  const maile = unique.map((l) => l.email).filter((e): e is string => Boolean(e));
-  const znane = await prisma.lead.findMany({
-    where: { OR: [{ phone: { in: telefony } }, { email: { in: maile } }] },
-    select: { phone: true, email: true },
-  });
+  // Tożsamość idzie po CIĄGU CYFR (`leadIdentity` -> `phoneKey`), a takiego
+  // porównania nie da się wyrazić zapytaniem `where phone IN (...)`: w bazie
+  // ten sam numer potrafi leżeć jako `605687770`, `48605687770` i `+48605687770`.
+  // Dlatego bierzemy numery i adresy WSZYSTKICH leadów i budujemy zbiór
+  // tożsamości w pamięci.
+  //
+  // To jedno zapytanie po dwóch kolumnach - przy skali klubu (setki, nie
+  // miliony wierszy) kosztuje mniej niż jedna podróż do bazy na wiersz pliku,
+  // a jest jedynym porównaniem, które realnie łapie duplikat.
+  const znane = await prisma.lead.findMany({ select: { phone: true, email: true } });
   const wBazie = new Set(znane.map((l) => leadIdentity(l)).filter((k): k is string => k !== null));
 
   const zewnetrzne = unique.map((l) => l.externalId).filter((id): id is string => Boolean(id));

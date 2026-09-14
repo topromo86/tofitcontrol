@@ -98,7 +98,21 @@ describe("dedupeLeads", () => {
 
 describe("leadIdentity", () => {
   it("numer ma pierwszeństwo przed e-mailem", () => {
-    expect(leadIdentity({ phone: "+48500600700", email: "a@b.pl" })).toBe("tel:+48500600700");
+    expect(leadIdentity({ phone: "+48500600700", email: "a@b.pl" })).toBe("tel:PL:500600700");
+  });
+
+  it("ten sam numer w różnych zapisach to JEDNA tożsamość", () => {
+    // To jest cała lekcja z produkcji: tożsamość szła po NAPISIE, więc lead
+    // zapisany starym parserem jako "48500600700" nie zrównywał się
+    // z "+48500600700" z nowego importu i ten sam człowiek wchodził do klubu
+    // kolejny raz. Na bazie klubu urosło z tego 923 leady na 183 osoby.
+    const zapisy = ["500600700", "48500600700", "+48500600700", "+48 500 600 700"];
+    const tozsamosci = new Set(zapisy.map((phone) => leadIdentity({ phone, email: null })));
+    expect(tozsamosci.size).toBe(1);
+  });
+
+  it("e-mail wchodzi dopiero, gdy numeru nie da się odczytać", () => {
+    expect(leadIdentity({ phone: "brak", email: "A@B.pl" })).toBe("mail:a@b.pl");
   });
 
   it("bez kontaktu nie ma tożsamości", () => {

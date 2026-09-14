@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatPhone, parsePhone } from "./phone";
+import { formatPhone, parsePhone, phoneKey } from "./phone";
 
 function phoneOf(raw: string): string | null {
   const result = parsePhone(raw);
@@ -85,5 +85,43 @@ describe("formatPhone", () => {
   it("zagranicznego nie grupuje", () => {
     expect(formatPhone("+380671234567")).toBe("+380671234567");
     expect(formatPhone("+4915112345678")).toBe("+4915112345678");
+  });
+});
+
+describe("phoneKey - tożsamość numeru po ciągu cyfr", () => {
+  it("ten sam numer w pięciu zapisach to JEDNA osoba", () => {
+    // Dokładnie te postacie leżały obok siebie w bazie klubu i przez
+    // porównywanie napisów dały 923 leady na 183 osoby.
+    const ten_sam = [
+      "605687770",
+      "48605687770",
+      "+48605687770",
+      "+48 605 687 770",
+      "0048605687770",
+    ];
+    const klucze = new Set(ten_sam.map((n) => phoneKey(n)));
+    expect(klucze.size).toBe(1);
+    expect([...klucze][0]).toBe("PL:605687770");
+  });
+
+  it("zna zapis z wiodącym zerem z wizytówki", () => {
+    expect(phoneKey("0605687770")).toBe("PL:605687770");
+  });
+
+  it("numeru zagranicznego NIE ścina do dziewięciu cyfr", () => {
+    // Holenderski numer kończy się inaczej niż polski, ale gdyby ścinać do
+    // dziewięciu cyfr, dwa kraje zlałyby się w jedną osobę.
+    expect(phoneKey("31613737346")).toBe("INT:31613737346");
+    expect(phoneKey("+380671234567")).toBe("INT:380671234567");
+  });
+
+  it("różne numery zostają różne", () => {
+    expect(phoneKey("605687770")).not.toBe(phoneKey("605687771"));
+  });
+
+  it("pusty i śmieciowy numer nie ma tożsamości", () => {
+    expect(phoneKey(null)).toBeNull();
+    expect(phoneKey("")).toBeNull();
+    expect(phoneKey("brak")).toBeNull();
   });
 });

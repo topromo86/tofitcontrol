@@ -79,6 +79,39 @@ export function parsePhoneOrNull(raw: string | null | undefined): string | null 
   return "phone" in result ? result.phone : null;
 }
 
+// TOŻSAMOŚĆ numeru - do porównywania, nie do pokazywania.
+//
+// Zwraca sam ciąg cyfr, sprowadzony do postaci krajowej tam, gdzie da się to
+// zrobić bez zgadywania. Dzięki temu ten sam człowiek jest jedną osobą,
+// niezależnie od tego, jak numer trafił do bazy:
+//
+//   605687770        -> PL:605687770
+//   48605687770      -> PL:605687770
+//   +48 605 687 770  -> PL:605687770
+//   0048605687770    -> PL:605687770
+//   0605687770       -> PL:605687770
+//
+// Numeru zagranicznego NIE ścinamy do dziewięciu cyfr - dwa kraje mogą mieć tę
+// samą końcówkę i zlepilibyśmy obcych ludzi w jedną osobę.
+//
+// Po co to, skoro `parsePhone` i tak sprowadza wszystko do `+48...`: bo
+// w bazie leżą wiersze sprzed wprowadzenia tej reguły, a porównywanie numerów
+// jako NAPISÓW przepuściło ten sam numer pięć razy. Na produkcji dało to 923
+// leady na 183 osoby. Tożsamość ma iść po cyfrach, nie po zapisie.
+export function phoneKey(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cyfry = raw.replace(/\D/g, "");
+  if (cyfry.length === 0) return null;
+
+  // "00" to zapis kierunkowego z klawiatury telefonu (0048..., 0031...).
+  let d = cyfry.startsWith("00") ? cyfry.slice(2) : cyfry;
+
+  if (d.length === POLISH_DIGITS + 2 && d.startsWith("48")) d = d.slice(2);
+  else if (d.length === POLISH_DIGITS + 1 && d.startsWith("0")) d = d.slice(1);
+
+  return d.length === POLISH_DIGITS ? `PL:${d}` : `INT:${d}`;
+}
+
 // Do wyświetlania. Polskie numery rozdzielamy po trzy cyfry (+48 500 600 700),
 // bo tak się je u nas czyta. Zagranicznych nie grupujemy - każdy kraj robi to
 // inaczej i zgadywanie skończyłoby się gorzej niż brak grupowania.
