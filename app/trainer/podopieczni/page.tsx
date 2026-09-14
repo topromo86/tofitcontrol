@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireTrainerSelf } from "@/lib/auth/guard";
 import { formatDate } from "@/lib/format";
+import { ChildMark } from "@/app/child-mark";
 
 export default async function PodopieczniPage() {
   const { trainer } = await requireTrainerSelf();
@@ -34,7 +35,7 @@ export default async function PodopieczniPage() {
                 <div className="min-w-0">
                   <p className="text-text font-medium">
                     {m.firstName} {m.lastName}
-                    {m.isMinor ? " (dziecko)" : ""}
+                    {m.isMinor ? <ChildMark className="ml-1" /> : null}
                   </p>
                   <p className="text-muted-brand font-mono text-xs">
                     Status {m.status} ·{" "}

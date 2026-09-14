@@ -6,6 +6,7 @@ import { isoDay, MAX_BACKDATE_DAYS } from "@/lib/domain/payment-correction";
 import { SubmitButton } from "./submit-button";
 import { Input } from "@/components/ui/input";
 import { recordPaymentAction, sellPassAction } from "./payment-actions";
+import { ChildMark } from "./child-mark";
 
 // Lista klientów z przyjmowaniem wpłat. Wspólna dla kasy trenera i panelu
 // właściciela - reguły rozliczenia są te same, więc jeden komponent zamiast
@@ -97,7 +98,7 @@ export function PaymentsList({
             <div>
               <p className="text-text font-medium">
                 {m.firstName} {m.lastName}
-                {m.isMinor ? " (dziecko)" : ""}
+                {m.isMinor ? <ChildMark className="ml-1" /> : null}
               </p>
               {isFrozen ? (
                 <p className="text-muted-brand font-mono text-xs">Zamrożony</p>

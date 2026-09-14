@@ -802,11 +802,8 @@ Zamiast napisu "dziecko" przy nazwisku stoi **ikona plecaka** w barwie
 `cat-sky`. Napis zjadal szerokosc nazwiska, a to ono jest na tej liscie
 najwazniejsze; ikona czyta sie jednym spojrzeniem.
 
-Barwa jest z palety RODZAJOW ZAJEC (`cat-*`), ktora celowo nie niesie znaczenia
-statusu - czerwien, bursztyn i jadeit sa w tym wierszu zarezerwowane dla
-karnetu. Ikona nigdy nie stoi sama: ma `aria-label` dla czytnika ekranu
-i `title` z powodem, dla ktorego ten znacznik istnieje ("kontaktem jest
-rodzic").
+Znacznik jest WSPOLNY dla calego systemu - `ChildMark` (`app/child-mark.tsx`).
+Patrz sekcja "Jeden znacznik dziecka na caly system".
 
 ### Telefon w wierszu, bo klub dzwoni czesciej niz pisze
 
@@ -883,6 +880,53 @@ klienta. Ten sam powod co przy karcie klienta.
 - **szukanie po numerze telefonu i po `member.email`**. Dzis `q` pyta
   o `user.email`, czyli adres LOGOWANIA, ktorego wiersz nigdzie nie pokazuje -
   czlowiek wpisuje adres z karty klienta i nie dostaje nic.
+
+## Jeden znacznik dziecka na caly system
+
+`ChildMark` (`app/child-mark.tsx`) - ikona plecaka w barwie `cat-sky`. Jedno
+miejsce, ktore odpowiada na pytanie "to dotyczy dziecka".
+
+Wczesniej ten sam fakt byl pokazywany na CZTERY sposoby naraz:
+
+| gdzie | jak bylo |
+| --- | --- |
+| kartoteka `/admin` | ikona plecaka |
+| kasa, podopieczni trenera, przelacznik kont, zapis na zajecia | dopisek "(dziecko)" |
+| rodzaje karnetow `/admin/karnety` | dopisek "(dzieci)" |
+| grafik `/admin/zajecia` | **bursztynowa pigulka "Dzieci"** |
+
+Czlowiek, ktory nauczyl sie jednego, i tak musial czytac pozostale trzy.
+Bursztynowa pigulka byla przy tym wprost sprzeczna z paleta: **bursztyn znaczy
+"karnet konczy sie wkrotce"**, a nie "grupa dziecieca" - to jest dokladnie ta
+kradziez znaczenia, przed ktora ostrzega sekcja o kolorze w kartotece.
+
+### Trzy przypadki, trzy opisy, jedna ikona
+
+Znacznik stoi przy trzech ROZNYCH faktach z bazy i dla czytajacego kazdy znaczy
+co innego, wiec opisy siedza w komponencie, a nie u wolajacego - inaczej po pol
+roku byloby ich osiem roznych:
+
+| `subject` | fakt w bazie | `aria-label` |
+| --- | --- | --- |
+| `member` | `Member.isMinor` | Dziecko |
+| `plan` | `Plan.forMinors` | Karnet dla dzieci |
+| `class` | `ClassTemplate.isKids` | Grupa dziecieca |
+
+Kazdy z nich jest **flaga w bazie**, nie zgadywaniem z nazwy. To nie jest
+drobiazg: klub ma plany nazwane "Kids/Junior", ale znacznik nie ma prawa
+wnioskowac z napisu - tak samo jak deduplikacja leadow nie idzie po nazwisku,
+a usuwanie demo nie idzie "po ksztalcie".
+
+### Zasady
+
+- **Barwa z palety `cat-*`**, ktora celowo nie niesie znaczenia statusu.
+  Czerwien, bursztyn i jadeit sa zarezerwowane dla karnetu i nie wolno ich uzyc
+  do czegokolwiek innego,
+- **ikona NIGDY nie stoi sama**: niesie `aria-label` dla czytnika ekranu
+  i `title` z powodem, dla ktorego ten znacznik istnieje. Sam obrazek nic nie
+  mowi komus, kto widzi go pierwszy raz,
+- **nie wchodzi do `<option>`** - tam mieszcza sie wylacznie napisy. Gdyby
+  ktorys wybor listy rozwijanej miał oznaczac dziecko, musi to zrobic tekstem.
 
 ## Sprzedaz karnetu z kartoteki
 

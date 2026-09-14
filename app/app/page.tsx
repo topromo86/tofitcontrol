@@ -24,6 +24,7 @@ import {
   reportAbsencePeriodAction,
   reportSessionAbsenceAction,
 } from "./actions";
+import { ChildMark } from "@/app/child-mark";
 
 const RATING_DELAY_MS = 3_600_000;
 
@@ -249,9 +250,7 @@ export default async function SchedulePage({
               }`}
             >
               {m.firstName}
-              {m.relation === "child" ? (
-                <span className="text-muted-brand ml-1 text-xs">(dziecko)</span>
-              ) : null}
+              {m.relation === "child" ? <ChildMark className="ml-1" /> : null}
             </Link>
           ))}
         </div>

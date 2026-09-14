@@ -38,6 +38,7 @@ import {
   updateCategoryAction,
   updateSessionAction,
 } from "./actions";
+import { ChildMark } from "@/app/child-mark";
 
 const selectClass =
   "border-line bg-surface-2 text-text w-full rounded-md border px-2 py-2 text-base md:text-sm";
@@ -532,11 +533,11 @@ export default async function AdminSessionsPage({
                 <div>
                   <p className="text-text font-medium">
                     {resolveClassName(tpl.name, tpl.category?.name ?? "Zajęcia")}
-                    {tpl.isKids ? (
-                      <span className="bg-amber/10 text-amber ml-2 rounded-full px-2 py-0.5 font-mono text-xs uppercase">
-                        Dzieci
-                      </span>
-                    ) : null}
+                    {/* Wcześniej bursztynowa pigułka "Dzieci" - a bursztyn w tym
+                        systemie znaczy "karnet kończy się wkrótce". Ten sam
+                        znacznik co przy dziecku w kartotece i przy karnecie
+                        dziecięcym. */}
+                    {tpl.isKids ? <ChildMark subject="class" className="ml-1.5" /> : null}
                   </p>
                   <p className="text-muted-brand mt-1 font-mono text-xs">
                     {WEEKDAY_LABELS[tpl.weekday]} · {tpl.startTime} · {tpl.durationMin} min ·{" "}

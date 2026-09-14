@@ -10,6 +10,7 @@ import {
   togglePlanActiveAction,
   updatePlanAction,
 } from "./actions";
+import { ChildMark } from "@/app/child-mark";
 
 const selectClass = "border-line bg-surface-2 text-text mt-1 w-full rounded-md border px-3 py-2";
 
@@ -200,7 +201,7 @@ export default async function AdminPlansPage({
               <div>
                 <p className="text-text font-medium">
                   {plan.name}
-                  {plan.forMinors ? " (dzieci)" : ""}
+                  {plan.forMinors ? <ChildMark subject="plan" className="ml-1.5" /> : null}
                   {plan.forIndividual ? " (indywidualne)" : ""}
                   {plan.active ? "" : " · wycofany"}
                 </p>

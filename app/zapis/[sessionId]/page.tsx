@@ -13,6 +13,7 @@ import { formatDayTime } from "@/lib/format";
 import { bookSessionAction } from "@/app/app/actions";
 import { SiteFooter } from "../../site-footer";
 import { ThemeToggle } from "../../theme-toggle";
+import { ChildMark } from "@/app/child-mark";
 
 // Strona pojedynczych zajęć - miejsce, w które prowadzi harmonogram na witrynie
 // klubu (czaplaboxing.pl/harmonogram-zajec).
@@ -155,9 +156,7 @@ export default async function PublicSessionPage({
               >
                 <p className="text-text text-center text-sm">
                   {member.firstName} {member.lastName}
-                  {member.relation === "child" ? (
-                    <span className="text-muted-brand"> (dziecko)</span>
-                  ) : null}
+                  {member.relation === "child" ? <ChildMark className="ml-1" /> : null}
                 </p>
 
                 {status === "BOOKABLE" ? (

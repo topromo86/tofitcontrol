@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import Link from "next/link";
-import { Backpack, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth/guard";
@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SubmitButton } from "@/app/submit-button";
 import { freezePassAction, unfreezePassAction } from "./actions";
+import { ChildMark } from "@/app/child-mark";
 
 type AdminSearchParams = {
   q?: string;
@@ -422,25 +423,9 @@ export default async function AdminMembersPage({
                       <span className="min-w-0 truncate font-medium">
                         {m.lastName} {m.firstName}
                       </span>
-                      {/* Piktogram zamiast napisu "dziecko": czyta się jednym
-                          spojrzeniem i nie zjada szerokości nazwiska, a to ono
-                          jest na tej liście najważniejsze.
-                          Barwa z palety RODZAJÓW ZAJĘĆ (cat-*), która celowo
-                          nie niesie znaczenia statusu - czerwień, bursztyn
-                          i jadeit są w tym wierszu zarezerwowane dla karnetu
-                          i nie wolno ich użyć do czegokolwiek innego.
-                          Ikona nigdy nie stoi sama: ma `aria-label` dla
-                          czytnika ekranu i `title` z powodem, dla którego ten
-                          znacznik w ogóle jest - do dziecka dzwoni się do
-                          rodzica. */}
-                      {m.isMinor ? (
-                        <span
-                          title="Dziecko - kontaktem jest rodzic"
-                          className="text-cat-sky shrink-0"
-                        >
-                          <Backpack role="img" aria-label="Dziecko" className="size-4" />
-                        </span>
-                      ) : null}
+                      {/* Powód tego znacznika i jego barwy siedzi w jednym
+                          miejscu - app/child-mark.tsx. */}
+                      {m.isMinor ? <ChildMark subject="member" /> : null}
                     </Link>
                   </div>
 
